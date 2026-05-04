@@ -1,0 +1,51 @@
+╔═══════════════════════════════════════════════════╗
+║   ELITE FITNESS - DEPLOYMENT INDEX CARD           ║
+║   Keep this handy while deploying                 ║
+╚═══════════════════════════════════════════════════╝
+
+
+⚡ ULTRA QUICK START
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. firebase init hosting  (dist, y, N, N)
+2. npm run build
+3. firebase deploy
+4. Visit: elite-fitness-9ecf5.web.app
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+📋 FILES TO OPEN NOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⭐ /DO_THIS_NOW.md                  (main guide)
+⭐ /FIREBASE_INIT_CHEATSHEET.txt    (prompt answers)
+⭐ /DEPLOY_NOW.md                   (complete guide)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+🎯 FIREBASE INIT ANSWERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Features?        Hosting (Space + Enter)
+Project?         elite-fitness-9ecf5
+Public?          dist
+SPA?             y (yes)
+GitHub?          N (no)
+Overwrite?       N (no)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+🌐 YOUR LIVE URLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+https://elite-fitness-9ecf5.web.app
+https://elite-fitness-9ecf5.firebaseapp.com
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+🔐 OAUTH REDIRECT URLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+https://elite-fitness-9ecf5.web.app/__/auth/handler
+https://elite-fitness-9ecf5.firebaseapp.com/__/auth/handler
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+⏱️ TIME: 5 MINUTES
+💪 YOU'VE GOT THIS!
+🚀 LET'S GO LIVE!

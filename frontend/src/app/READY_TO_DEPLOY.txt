@@ -1,0 +1,91 @@
+READY_TO_DEPLOY.txt
+
+Straightforward deployment reference
+
+===============================================================================
+
+1. Commands to Run
+-------------------------------------------------------------------------------
+
+firebase init hosting       # Use /FIREBASE_INIT_CHEATSHEET.txt for answers
+npm run build               # Confirm build completes without warnings
+firebase deploy             # Wait for confirmation message
+
+
+Live URLs after deploy:
+
+https://elite-fitness-9ecf5.web.app
+https://elite-fitness-9ecf5.firebaseapp.com
+
+
+Redirect URLs for OAuth:
+
+https://elite-fitness-9ecf5.web.app/__/auth/handler
+https://elite-fitness-9ecf5.firebaseapp.com/__/auth/handler
+
+
+2. Expected Timeline
+-------------------------------------------------------------------------------
+
+firebase init: ~1 minute
+build: ~30 seconds
+deploy: ~2 minutes
+verification: ~1 minute
+
+Total: roughly 5 minutes.
+
+
+3. Files to Keep Open During Deployment
+-------------------------------------------------------------------------------
+
+/DO_THIS_NOW.md
+/FIREBASE_INIT_CHEATSHEET.txt
+/INDEX_CARD.txt
+
+
+4. Post-Deploy Checks (Practical, Required)
+-------------------------------------------------------------------------------
+
+Confirm the deployed build matches the latest commit
+Ensure HTTPS redirect is active
+Open dev tools and confirm no missing environment variables
+Load the site in incognito to avoid cached files
+Confirm all routes resolve without client-side errors
+Verify your Firebase Hosting version was updated (Hosting → Releases)
+
+
+5. Authentication Checks
+-------------------------------------------------------------------------------
+
+Use both redirects and ensure providers accept them:
+
+https://elite-fitness-9ecf5.web.app/__/auth/handler
+https://elite-fitness-9ecf5.firebaseapp.com/__/auth/handler
+
+Verify:
+
+Sign-in flow loads and completes
+Redirect back to your site succeeds
+Errors are logged correctly
+
+
+6. Optional but Recommended
+-------------------------------------------------------------------------------
+
+If your framework supports a production flag, run the build with it
+Confirm Firestore rules are in the intended state
+Confirm Supabase RLS is active for all user tables
+Add both production URLs to monitoring or uptime services
+Sync OAuth providers with your final domains
+
+
+7. Ready to Go
+-------------------------------------------------------------------------------
+
+Once the checks above pass, your hosting environment is considered stable and 
+production-ready. No further configuration is required unless adding a custom 
+domain.
+
+
+===============================================================================
+End of deployment reference

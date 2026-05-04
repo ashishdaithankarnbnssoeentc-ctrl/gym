@@ -1,0 +1,169 @@
+# Render Deployment Configuration
+# Production-ready backend deployment
+
+services:
+  # Main API Service
+  - type: web
+    name: elite-fitness-backend
+    env: node
+    plan: starter
+    buildCommand: "npm install && npm run build"
+    startCommand: "node dist/index.js"
+    healthCheckPath: /
+    
+    # Environment Variables (set in Render dashboard)
+    # NODE_ENV=production
+    # PORT=5000
+    # SUPABASE_URL=https://your-project.supabase.co
+    # SUPABASE_SERVICE_ROLE_KEY=eyJ...
+    # FIREBASE_PROJECT_ID=your-project
+    # FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+    # FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+    # FRONTEND_URL=https://your-app.vercel.app
+    # SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+    
+    # Auto-deploy on push to main branch
+    autoDeploy: true
+    
+    # Health check configuration
+    healthCheck:
+      path: /
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+      
+    # Resource limits
+    resources:
+      memory: 512Mi
+      cpu: 0.5
+      
+    # Scaling
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+      
+    # Build context
+    buildContext:
+      rootDir: .
+      
+    # Dependencies
+    dependencies:
+      - "@sentry/node"
+      - "@sentry/tracing"
+      - "express"
+      - "cors"
+      - "dotenv"
+      - "express-rate-limit"
+      - "firebase-admin"
+      - "@supabase/supabase-js"
+      
+    # Build cache
+    buildCache:
+      paths:
+        - node_modules
+        - .npm
+        
+    # Post-build commands
+    postBuild:
+      - echo "Build completed successfully"
+      
+    # Pre-deploy hooks
+    preDeploy:
+      - npm run test
+      - npm run build
+      
+    # Environment-specific settings
+    environments:
+      production:
+        memory: 1024Mi
+        cpu: 1
+        scaling:
+          minInstances: 2
+          maxInstances: 10
+      staging:
+        memory: 512Mi
+        cpu: 0.5
+        scaling:
+          minInstances: 1
+          maxInstances: 3
+
+# Database (using Supabase - external)
+# No database service needed as Supabase handles it
+
+# Background Workers (if needed)
+  - type: worker
+    name: elite-fitness-worker
+    env: node
+    plan: starter
+    buildCommand: "npm install && npm run build"
+    startCommand: "node dist/worker.js"
+    
+    # Environment variables same as web service
+    # (inherited from service environment)
+    
+    # Resource limits
+    resources:
+      memory: 256Mi
+      cpu: 0.25
+      
+    # Scaling
+    scaling:
+      minInstances: 1
+      maxInstances: 2
+
+# Cron Jobs (if needed)
+  - type: cron
+    name: daily-maintenance
+    schedule: "0 2 * * *"  # Daily at 2 AM UTC
+    env: node
+    plan: starter
+    buildCommand: "npm install && npm run build"
+    startCommand: "node dist/cron/maintenance.js"
+    
+    # Environment variables
+    # (inherited from service environment)
+
+# Deploy Hooks
+deployHooks:
+  preDeploy:
+    - echo "Starting deployment..."
+    - npm run lint
+    - npm run test
+    - npm run build
+  postDeploy:
+    - echo "Deployment completed"
+    - curl -X POST https://api.your-app.com/health-check
+    
+# Notifications
+notifications:
+  email:
+    onDeploy: true
+    onError: true
+    recipients:
+      - your-email@example.com
+
+# Security
+security:
+  # Enable automatic TLS
+  tls: true
+  
+  # Security headers
+  headers:
+    X-Frame-Options: DENY
+    X-Content-Type-Options: nosniff
+    X-XSS-Protection: "1; mode=block"
+    Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+    
+  # Rate limiting
+  rateLimit:
+    requests: 100
+    window: 60s
+    
+# Logging
+logging:
+  level: info
+  format: json
+  
+# Backup (handled by Supabase)
+# No backup configuration needed

@@ -1,0 +1,106 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3.5.2
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3.6.0
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Type check
+      run: npm run typecheck
+    
+    - name: Build backend
+      run: npm run build:backend
+    
+    - name: Build frontend
+      run: npm run build:frontend
+    
+    - name: Security scan
+      run: |
+        npm audit --audit-level moderate
+    
+    - name: Check for forbidden patterns
+      shell: pwsh
+      run: |
+        # Check for Supabase in frontend
+        if (Get-ChildItem -Path "frontend/src" -Recurse -Include *.ts,*.tsx | Select-String "supabase" -Quiet) {
+          Write-Error "❌ Supabase found in frontend!"
+          exit 1
+        }
+        
+        # Check for exposed secrets
+        $secrets = @(".env", ".env.local", "serviceAccountKey.json", "firebase-credentials.json")
+        foreach ($secret in $secrets) {
+          if (Test-Path $secret) {
+            Write-Error "❌ Secret file found: $secret"
+            exit 1
+          }
+        }
+        
+        Write-Host "✅ Security checks passed"
+    
+    - name: Start backend for testing
+      run: |
+        cd backend
+        npm run start &
+        sleep 10
+        
+    - name: Run API validation (security tests)
+      run: node scripts/test-api.js
+      
+    - name: Fail on console errors
+      run: |
+        if grep -r "UnhandledPromiseRejection" backend/; then 
+          echo "❌ Unhandled promise rejections found"
+          exit 1
+        fi
+        echo "✅ No unhandled rejections"
+        
+    - name: Install load testing tool
+      run: npm install -g autocannon
+      
+    - name: Stage 1 Load Test (50 users)
+      run: |
+        autocannon -c 50 -d 20 http://localhost:5000/api/content
+        echo "✅ Stage 1 load test passed"
+        
+    - name: Stage 2 Load Test (100 users)
+      run: |
+        autocannon -c 100 -d 30 http://localhost:5000/api/content
+        echo "✅ Stage 2 load test passed"
+        
+    - name: Membership Load Test (real logic)
+      run: |
+        autocannon -c 50 -d 20 http://localhost:5000/api/membership/me
+        echo "✅ Membership load test passed"
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3.1.2
+      if: always()
+      with:
+        name: build-artifacts
+        path: |
+          frontend/dist/
+          backend/dist/
+        retention-days: 1

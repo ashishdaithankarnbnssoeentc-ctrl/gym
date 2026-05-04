@@ -1,0 +1,46 @@
+{
+  "name": "elite-fitness-backend",
+  "version": "1.0.0",
+  "description": "Production backend for Elite Fitness Platform",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon --exec tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "express",
+    "firebase",
+    "supabase",
+    "auth"
+  ],
+  "author": "Aesthenixtech",
+  "license": "MIT",
+  "dependencies": {
+    "@sentry/node": "^10.51.0",
+    "@sentry/tracing": "^7.120.4",
+    "@supabase/supabase-js": "^2.104.0",
+    "@types/pdfkit": "^0.17.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.4.1",
+    "firebase-admin": "^13.0.1",
+    "ioredis": "^5.10.1",
+    "node-cron": "^4.2.1",
+    "node-fetch": "^3.3.2",
+    "pdfkit": "^0.18.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.8",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}

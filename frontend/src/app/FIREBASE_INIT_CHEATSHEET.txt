@@ -1,0 +1,62 @@
+╔════════════════════════════════════════════════════════════════════╗
+║           FIREBASE INIT HOSTING - CHEAT SHEET                      ║
+║                  Keep This Open While Running                      ║
+╚════════════════════════════════════════════════════════════════════╝
+
+COMMAND TO RUN:
+───────────────
+firebase init hosting
+
+
+PROMPTS & ANSWERS:
+──────────────────
+
+1. Which features?
+   ➜ Select: Hosting (press Space, then Enter)
+
+2. Use existing project?
+   ➜ Select: Use an existing project
+
+3. Which project?
+   ➜ Select: elite-fitness-9ecf5 (Elite Fitness)
+
+4. Public directory?
+   ➜ Type: dist
+   ⚠️  NOT "public" - must be "dist"
+
+5. Single-page app?
+   ➜ Type: y (yes)
+
+6. GitHub auto-deploy?
+   ➜ Type: N (no)
+
+7. Overwrite index.html? (if asked)
+   ➜ Type: N (no)
+
+
+AFTER INIT:
+───────────
+
+Step 1: Build
+   npm run build
+
+Step 2: Deploy
+   firebase deploy
+
+Step 3: Visit
+   https://elite-fitness-9ecf5.web.app
+
+
+QUICK REFERENCE:
+────────────────
+Hosting     → YES (Space + Enter)
+Project     → elite-fitness-9ecf5
+Public Dir  → dist
+SPA         → y (yes)
+GitHub      → N (no)
+Overwrite   → N (no)
+
+
+═══════════════════════════════════════════════════════════════════
+              🔥 YOU'LL BE LIVE IN 5 MINUTES! 🔥
+═══════════════════════════════════════════════════════════════════
