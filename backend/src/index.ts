@@ -19,6 +19,8 @@ import { envValidator } from './config/env.validation.js';
 import { performanceMonitor } from './middleware/performance.monitoring.js';
 import { scalingMiddleware } from './middleware/scaling.middleware.js';
 import { productionSecurity } from './middleware/security.production.js';
+import { csrfProtection } from './middleware/csrf.cookies.js';
+import { secureAuthCookies } from './middleware/auth.cookies.js';
 import authRoutes from './routes/auth.js';
 import membershipRoutes from './routes/membership-basic.routes.js';
 import favoritesRoutes from './routes/favorites.js';
@@ -164,13 +166,19 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
+// Apply CSRF protection middleware
+app.use(csrfProtection.setToken());
+
+// Apply secure cookie authentication
+app.use('/api/auth', secureAuthCookies.authenticateAndSetCookie());
+
 // API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/favorites', favoritesRoutes);
-app.use('/api/content', contentRoutes);
-app.use('/api/proposals', proposalsRoutes);
-app.use('/api/membership', membershipRoutes);
-app.use('/api/media', mediaRoutes);
+app.use('/api', authRoutes);
+app.use('/api', membershipRoutes);
+app.use('/api', favoritesRoutes);
+app.use('/api', contentRoutes);
+app.use('/api', proposalsRoutes);
+app.use('/api', mediaRoutes);
 
 // Apply global membership enforcement to protected routes
 app.use('/api/favorites', requireActiveMembership);
