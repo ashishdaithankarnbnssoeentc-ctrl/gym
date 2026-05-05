@@ -12,14 +12,13 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
-import { initSentry, requestTrackingMiddleware, errorHandlerMiddleware, comprehensiveSecurity } from './sentry.js';
+import { initSentry, requestTrackingMiddleware, errorHandlerMiddleware } from './sentry.js';
 import { requireAuth } from './middleware/auth.js';
 import { requireActiveMembership } from './middleware/global.membership.middleware.js';
 import { envValidator } from './config/env.validation.js';
 import { performanceMonitor } from './middleware/performance.monitoring.js';
 import { scalingMiddleware } from './middleware/scaling.middleware.js';
-import { createRateLimit } from './middleware/security.hardening.js';
-import { comprehensiveSecurity } from './middleware/security.comprehensive.js';
+import { productionSecurity } from './middleware/security.production.js';
 import authRoutes from './routes/auth.js';
 import membershipRoutes from './routes/membership-basic.routes.js';
 import favoritesRoutes from './routes/favorites.js';
@@ -49,6 +48,9 @@ const FRONTEND_URL = envConfig.FRONTEND_URL;
 
 // Parse multiple origins from env (comma-separated)
 const allowedOrigins = FRONTEND_URL.split(',').map(url => url.trim());
+
+// Apply production-grade security middleware
+app.use(productionSecurity.middleware());
 
 // Production CORS and Security Middleware
 app.use(cors({
