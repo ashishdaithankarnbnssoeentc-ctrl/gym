@@ -41,27 +41,27 @@ export async function requireTransactionAuth(req: Request, res: Response, next: 
   const requestId = generateRequestId();
   const transactionId = generateTransactionId();
   const startTime = Date.now();
-  
+
   try {
     // 1. Extract and validate token
     const token = req.cookies?.authToken;
-    
+
     if (!token) {
       await logSecurityEvent(req, 'auth_missing_token', requestId, false);
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Authentication required',
-        requestId 
+        requestId
       });
     }
 
     // 2. Verify JWT token
     const decoded = await verifyToken(token);
-    
+
     if (!decoded || !decoded.uid) {
       await logSecurityEvent(req, 'auth_invalid_token', requestId, false);
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Invalid authentication token',
-        requestId 
+        requestId
       });
     }
 
@@ -74,30 +74,30 @@ export async function requireTransactionAuth(req: Request, res: Response, next: 
 
     if (error || !user) {
       await logSecurityEvent(req, 'auth_user_not_found', requestId, false);
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'User not found',
-        requestId 
+        requestId
       });
     }
 
     // 4. Validate user status
     if (user.status !== 'active') {
       await logSecurityEvent(req, 'auth_inactive_user', requestId, false);
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Account not active',
-        requestId 
+        requestId
       });
     }
 
     // 5. CRITICAL: Create transaction-scoped tenant binding
     // This ensures connection pool safety and prevents cross-tenant leakage
     const client = supabase; // In production, use dedicated client per request
-    
+
     // Begin transaction for tenant isolation
     await client.rpc('begin_transaction');
-    
+
     // Set LOCAL session variables (transaction-scoped, connection-safe)
-    await client.rpc('set_local_tenant_context', { 
+    await client.rpc('set_local_tenant_context', {
       tenant_id: user.tenant_id,
       user_id: user.id,
       user_role: user.role || 'user'
@@ -145,10 +145,10 @@ export async function requireTransactionAuth(req: Request, res: Response, next: 
       duration,
       error: error.message
     });
-    
-    return res.status(401).json({ 
+
+    return res.status(401).json({
       error: 'Authentication failed',
-      requestId 
+      requestId
     });
   }
 }
@@ -232,7 +232,7 @@ export function apiRateLimit(req: Request, res: Response, next: NextFunction) {
         limit: strictLimit.limit,
         window: strictLimit.window
       });
-      
+
       return res.status(429).json({
         error: 'Rate limit exceeded',
         retryAfter: Math.ceil(strictLimit.window / 1000),
@@ -245,10 +245,10 @@ export function apiRateLimit(req: Request, res: Response, next: NextFunction) {
   if (userId) {
     if (!rateLimiter.checkLimit(`user:${userId}`, rateLimiter['USER_LIMIT'], rateLimiter['WINDOW_MS'])) {
       logSecurityEvent(req, 'rate_limit_user', req.securityContext?.requestId, false, {
-        userId,
+        userId: userId || 'anonymous',
         limit: rateLimiter['USER_LIMIT']
       });
-      
+
       return res.status(429).json({
         error: 'User rate limit exceeded',
         retryAfter: 60,
@@ -260,10 +260,10 @@ export function apiRateLimit(req: Request, res: Response, next: NextFunction) {
   // Check general IP limits
   if (!rateLimiter.checkLimit(`ip:${ip}`, rateLimiter['IP_LIMIT'], rateLimiter['WINDOW_MS'])) {
     logSecurityEvent(req, 'rate_limit_ip', req.securityContext?.requestId, false, {
-      ip,
+      ip: ip || 'unknown',
       limit: rateLimiter['IP_LIMIT']
     });
-    
+
     return res.status(429).json({
       error: 'IP rate limit exceeded',
       retryAfter: 60,
@@ -271,134 +271,41 @@ export function apiRateLimit(req: Request, res: Response, next: NextFunction) {
     });
   }
 
-  next();
-}
+  // Run enhanced anomaly detection
+  const anomalies = await detectSmartAnomalies(userId, tenantId, {
+    ip,
+    userAgent: req.securityContext!.userAgent,
+    endpoint: req.path,
+    method: req.method
+  });
 
-/**
- * Safe logging middleware with sensitive data filtering
- */
-export function safeLogging(req: Request, res: Response, next: NextFunction) {
-  // Override res.json to filter sensitive data from logs
-  const originalJson = res.json;
-  res.json = function(data: any) {
-    // Filter sensitive data before logging
-    const safeData = filterSensitiveData(data);
-    
-    // Log API call with safe context
-    logSecurityEvent(req, 'api_response', req.securityContext?.requestId, true, {
-      statusCode: res.statusCode,
-      endpoint: req.path,
-      method: req.method,
-      hasData: !!data,
-      dataType: Array.isArray(data) ? 'array' : typeof data
+  // Smart blocking: consider IP + user correlation
+  const shouldBlock = await evaluateSmartBlock(userId, ip, anomalies);
+
+  if (shouldBlock) {
+    await createSmartBlock(userId, tenantId, ip, anomalies);
+    await logSecurityEvent(req, 'smart_block_triggered', req.securityContext!.requestId, false, {
+      anomalies,
+      reason: 'Smart anomaly detection'
     });
 
-    return originalJson.call(this, safeData);
-  };
+    return res.status(429).json({
+      error: 'Access temporarily blocked due to suspicious activity',
+      requestId: req.securityContext!.requestId,
+      retryAfter: 300
+    });
+  }
 
-  next();
-}
-
-/**
- * Admin verification middleware with DB fallback
- */
-export async function requireAdminVerified(req: Request, res: Response, next: NextFunction) {
-  await requireTransactionAuth(req, res, async () => {
-    if (!req.user) {
-      return res.status(401).json({ 
-        error: 'Authentication required',
-        requestId: req.securityContext?.requestId 
-      });
-    }
-
-    // Check JWT role first
-    if (req.user.role !== 'admin') {
-      await logSecurityEvent(req, 'admin_access_denied_jwt', req.securityContext?.requestId, false);
-      return res.status(403).json({ 
-        error: 'Admin access required',
-        requestId: req.securityContext?.requestId 
-      });
-    }
-
-    // CRITICAL: Verify admin status in database as well
-    const { data: adminCheck, error } = await supabase
-      .from('users')
-      .select('is_admin, role')
-      .eq('id', req.user.id)
-      .eq('tenant_id', req.user.tenantId)
-      .eq('is_admin', true)
-      .single();
-
-    if (error || !adminCheck || adminCheck.role !== 'admin') {
-      await logSecurityEvent(req, 'admin_access_denied_db', req.securityContext?.requestId, false);
-      return res.status(403).json({ 
-        error: 'Admin verification failed',
-        requestId: req.securityContext?.requestId 
-      });
-    }
-
-    await logSecurityEvent(req, 'admin_access_verified', req.securityContext?.requestId, true);
+  try {
     next();
-  });
-}
-
-/**
- * Enhanced blocking with IP + user correlation
- */
-export async function smartBlocking(req: Request, res: Response, next: NextFunction) {
-  await requireTransactionAuth(req, res, async () => {
-    const userId = req.user!.id;
-    const tenantId = req.user!.tenantId;
-    const ip = req.securityContext!.ip;
-    
-    try {
-      // Check for existing blocks
-      const isBlocked = await checkSmartBlock(userId, tenantId, ip);
-      
-      if (isBlocked) {
-        await logSecurityEvent(req, 'smart_block_active', req.securityContext!.requestId, false);
-        return res.status(429).json({ 
-          error: 'Access temporarily blocked due to suspicious activity',
-          requestId: req.securityContext!.requestId,
-          retryAfter: 300
-        });
-      }
-
-      // Run enhanced anomaly detection
-      const anomalies = await detectSmartAnomalies(userId, tenantId, {
-        ip,
-        userAgent: req.securityContext!.userAgent,
-        endpoint: req.path,
-        method: req.method
-      });
-
-      // Smart blocking: consider IP + user correlation
-      const shouldBlock = await evaluateSmartBlock(userId, ip, anomalies);
-
-      if (shouldBlock) {
-        await createSmartBlock(userId, tenantId, ip, anomalies);
-        await logSecurityEvent(req, 'smart_block_triggered', req.securityContext!.requestId, false, {
-          anomalies,
-          reason: 'Smart anomaly detection'
-        });
-        
-        return res.status(429).json({ 
-          error: 'Access temporarily blocked due to suspicious activity',
-          requestId: req.securityContext!.requestId,
-          retryAfter: 300
-        });
-      }
-
-      next();
-    } catch (error) {
-      console.error('Smart blocking failed:', error);
-      // Fail open but log the error
-      await logSecurityEvent(req, 'smart_blocking_error', req.securityContext!.requestId, false, {
-        error: error.message
-      });
-      next();
-    }
-  });
+  } catch (error) {
+    console.error('Smart blocking failed:', error);
+    // Fail open but log the error
+    await logSecurityEvent(req, 'smart_blocking_error', req.securityContext!.requestId, false, {
+      error: error.message
+    });
+    next();
+  }
 }
 
 /**
@@ -413,11 +320,11 @@ function generateTransactionId(): string {
 }
 
 function getClientIP(req: Request): string {
-  return req.ip || 
-         req.connection.remoteAddress || 
-         req.headers['x-forwarded-for'] as string || 
-         req.headers['x-real-ip'] as string || 
-         'unknown';
+  return req.ip ||
+    req.connection.remoteAddress ||
+    req.headers['x-forwarded-for'] as string ||
+    req.headers['x-real-ip'] as string ||
+    'unknown';
 }
 
 async function verifyToken(token: string): Promise<any> {
@@ -458,20 +365,20 @@ function filterSensitiveData(data: any): any {
   ];
 
   const filtered = Array.isArray(data) ? [...data] : { ...data };
-  
+
   const filterRecursive = (obj: any, depth = 0): any => {
     if (depth > 5) return obj; // Prevent infinite recursion
-    
+
     if (Array.isArray(obj)) {
       return obj.map(item => filterRecursive(item, depth + 1));
     }
-    
+
     if (obj && typeof obj === 'object') {
       const result: any = {};
       for (const [key, value] of Object.entries(obj)) {
         const lowerKey = key.toLowerCase();
         const isSensitive = sensitiveKeys.some(sensitive => lowerKey.includes(sensitive.toLowerCase()));
-        
+
         if (isSensitive) {
           result[key] = '[FILTERED]';
         } else if (typeof value === 'object' && value !== null) {
@@ -482,7 +389,7 @@ function filterSensitiveData(data: any): any {
       }
       return result;
     }
-    
+
     return obj;
   };
 

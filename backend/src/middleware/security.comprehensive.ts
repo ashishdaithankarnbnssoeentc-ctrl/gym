@@ -54,7 +54,7 @@ class ComprehensiveSecurity {
       // 2. IP-based attack detection
       (req: Request, res: Response, next: NextFunction) => {
         const ip = this.getClientIP(req);
-        
+
         // Track suspicious activity
         if (this.isSuspiciousActivity(req, ip)) {
           console.warn(`[SECURITY] Suspicious activity from ${ip}:`, {
@@ -63,7 +63,7 @@ class ComprehensiveSecurity {
             userAgent: req.get('User-Agent'),
             timestamp: new Date().toISOString()
           });
-          
+
           // Block if too many suspicious requests
           if (this.shouldBlockIP(ip)) {
             return res.status(429).json({
@@ -72,58 +72,64 @@ class ComprehensiveSecurity {
             });
           }
         }
-        
+
         next();
       },
 
       // 3. Request size limiting
       (req: Request, res: Response, next: NextFunction) => {
         const contentLength = req.get('content-length');
-        
+
         if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) {
           console.warn(`[SECURITY] Large request from ${this.getClientIP(req)}: ${contentLength} bytes`);
-          
+
           return res.status(413).json({
             error: 'Request too large',
             message: 'Request size exceeds maximum allowed size'
           });
         }
-        
+
         next();
       },
 
-      // 4. Input validation and sanitization
+      // 4. Input validation and sanitization (skip for health endpoint)
       (req: Request, res: Response, next: NextFunction) => {
-        // Validate query parameters
+        // Skip validation for health endpoints (precise matching only)
+        if (
+          req.path === '/' ||
+          req.path.startsWith('/api/health')
+        ) {
+          return next();
+        }
+
+        // Validate and sanitize query parameters
         const queryValidation = this.validateQuery(req.query);
         if (!queryValidation.valid) {
           console.warn(`[SECURITY] Invalid query parameters from ${this.getClientIP(req)}:`, queryValidation.errors);
-          
+
           return res.status(400).json({
             error: 'Invalid input',
             message: 'Request contains invalid parameters',
             details: queryValidation.errors
           });
         }
-        
-        // Validate request body
+        req.query = queryValidation.sanitized;
+
+        // Validate and sanitize request body
         const bodyValidation = this.validateBody(req.body);
         if (!bodyValidation.valid) {
           console.warn(`[SECURITY] Invalid body from ${this.getClientIP(req)}:`, bodyValidation.errors);
-          
+
           return res.status(400).json({
             error: 'Invalid input',
-            message: 'Request contains invalid data',
+            message: 'Request contains invalid body',
             details: bodyValidation.errors
           });
         }
-        
-        // Attach sanitized data
-        req.query = queryValidation.sanitized;
         req.body = bodyValidation.sanitized;
-        
+
         next();
-      }
+      },
     ];
   }
 
@@ -131,11 +137,11 @@ class ComprehensiveSecurity {
    * Get client IP with fallbacks
    */
   private getClientIP(req: Request): string {
-    return req.ip || 
-           req.connection.remoteAddress || 
-           req.socket.remoteAddress || 
-           (req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || 
-           'unknown';
+    return req.ip ||
+      req.connection.remoteAddress ||
+      req.socket.remoteAddress ||
+      (req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() ||
+      'unknown';
   }
 
   /**
@@ -143,13 +149,13 @@ class ComprehensiveSecurity {
    */
   private isSuspiciousActivity(req: Request, ip: string): boolean {
     const userAgent = req.get('User-Agent') || '';
-    
+
     // Check for common attack tools
     const attackTools = [
       'sqlmap', 'nmap', 'nikto', 'burp', 'owasp', 'zap',
       'python-requests', 'curl', 'wget', 'sqlninja'
     ];
-    
+
     const suspiciousPatterns = [
       /\.\./,           // Path traversal
       /union.*select/i,   // SQL injection
@@ -157,18 +163,18 @@ class ComprehensiveSecurity {
       /javascript:/i,      // XSS
       /\b(dropdown|select|insert|update|delete)\b/i  // SQL keywords
     ];
-    
+
     // Check user agent for attack tools
     const hasAttackTool = attackTools.some(tool => userAgent.toLowerCase().includes(tool));
-    
+
     // Check request path for suspicious patterns
     const hasSuspiciousPath = suspiciousPatterns.some(pattern => pattern.test(req.path));
-    
+
     // Check for rapid requests from same IP
     const rateData = this.rateLimitMap.get(ip) || { count: 0, resetTime: Date.now() };
     rateData.count++;
     this.rateLimitMap.set(ip, rateData);
-    
+
     return hasAttackTool || hasSuspiciousPath || rateData.count > 100;
   }
 
@@ -184,22 +190,24 @@ class ComprehensiveSecurity {
    * Validate query parameters
    */
   private validateQuery(query: any): { valid: boolean; sanitized: any; errors: string[] } {
-    const errors: string[] = [];
-    const sanitized: any = {};
-    
-    const querySchema = z.object({
-      category: z.string().max(50).optional(),
-      limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(100)),
-      offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0)),
-      search: z.string().max(100).optional(),
-      id: z.string().uuid().optional()
-    });
-    
     try {
-      const validated = querySchema.parse(query);
-      return { valid: true, sanitized: validated, errors: [] };
+      // Use Zod schema with coercion for proper validation
+      const querySchema = z.object({
+        limit: z.coerce.number().min(1).max(100).optional().default(10),
+        offset: z.coerce.number().min(0).optional().default(0),
+        category: z.string().optional(),
+        search: z.string().optional(),
+        tags: z.array(z.string()).optional().default([])
+      });
+
+      const parsed = querySchema.parse(query);
+      return { valid: true, sanitized: parsed, errors: [] };
     } catch (error: any) {
-      return { valid: false, sanitized: query, errors: [error.message] };
+      return {
+        valid: false,
+        sanitized: query || {},
+        errors: [error.message || 'Invalid query parameters']
+      };
     }
   }
 
@@ -209,19 +217,19 @@ class ComprehensiveSecurity {
   private validateBody(body: any): { valid: boolean; sanitized: any; errors: string[] } {
     const errors: string[] = [];
     let sanitized: any = {};
-    
+
     if (!body || typeof body !== 'object') {
       return { valid: true, sanitized: {}, errors: [] };
     }
-    
+
     // Remove dangerous properties
     const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
     sanitized = { ...body };
-    
+
     for (const key of dangerousKeys) {
       delete sanitized[key];
     }
-    
+
     // Basic sanitization for string values
     for (const [key, value] of Object.entries(sanitized)) {
       if (typeof value === 'string') {
@@ -232,7 +240,7 @@ class ComprehensiveSecurity {
           .trim();
       }
     }
-    
+
     return { valid: true, sanitized, errors: [] };
   }
 
@@ -242,7 +250,7 @@ class ComprehensiveSecurity {
   private cleanup(): void {
     const now = Date.now();
     const cutoff = now - (60 * 60 * 1000); // 1 hour ago
-    
+
     for (const [ip, data] of this.rateLimitMap.entries()) {
       if (data.resetTime < cutoff) {
         this.rateLimitMap.delete(ip);

@@ -11,14 +11,8 @@ import { trackApiCall, trackError, trackPerformance } from '../sentry.js';
 import { recordMediaFailure } from '../middleware/media.validation.middleware.js';
 import { z } from 'zod';
 
-// Strict validation schemas
-const contentQuerySchema = z.object({
-  category: z.string().max(50).regex(/^[a-zA-Z0-9\s_-]+$/).optional(),
-  limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(50)),
-  offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0)),
-  search: z.string().max(100).regex(/^[a-zA-Z0-9\s_-]+$/).optional(),
-  tags: z.array(z.string().max(20)).max(3).optional()
-}).strict();
+// Validation schemas - using middleware instead of direct validation
+// Note: Validation is handled by input.validation.ts middleware
 
 const contentIdSchema = z.object({
   id: z.string().uuid()
@@ -33,9 +27,8 @@ export const getContent = async (req: Request, res: Response) => {
   const startTime = Date.now();
 
   try {
-    // ❌ CRITICAL FIX: Validate query parameters strictly
-    const validatedQuery = contentQuerySchema.parse(req.query);
-    const { category, limit, offset, search, tags } = validatedQuery;
+    // Use validated query from middleware
+    const { category, limit, offset, search, tags } = req.query as any;
 
     // Track API call
     trackApiCall('/api/content', 'GET', req.user?.id);

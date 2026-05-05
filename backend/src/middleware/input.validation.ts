@@ -11,14 +11,8 @@ import { z } from 'zod';
 // Validation schemas
 const contentQuerySchema = z.object({
   category: z.string().optional(),
-  limit: z.string().regex(/^\d+$/).transform(Number).pipe(
-    z.number().min(1).max(100),
-    "Limit must be a number between 1 and 100"
-  ),
-  offset: z.string().regex(/^\d+$/).transform(Number).pipe(
-    z.number().min(0),
-    "Offset must be a non-negative number"
-  ),
+  limit: z.coerce.number().min(1).max(100).optional().default(10),
+  offset: z.coerce.number().min(0).optional().default(0),
   search: z.string().max(100).optional(),
   tags: z.array(z.string().max(50)).max(5).optional()
 });
@@ -56,7 +50,7 @@ class InputValidator {
   validateContentQuery(req: Request, res: Response, next: NextFunction): void {
     try {
       const validated = contentQuerySchema.parse(req.query);
-      req.query = validated;
+      Object.assign(req.query, validated);
       next();
     } catch (error: any) {
       console.warn('[INPUT VALIDATION] Content query validation failed:', error.errors);
@@ -148,14 +142,14 @@ class InputValidator {
       // Remove dangerous properties
       const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
       const sanitized = { ...req.body };
-      
+
       for (const key of dangerousKeys) {
         delete sanitized[key];
       }
-      
+
       req.body = sanitized;
     }
-    
+
     next();
   }
 }
