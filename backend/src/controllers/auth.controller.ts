@@ -1,23 +1,40 @@
 /**
- * Auth Controller
- *
- * Handles user authentication and profile management
+ * Secure Auth Controller
+ * 
+ * Handles user authentication and profile management with strict security
+ * Prevents mass assignment attacks and enforces proper input validation
  */
 
 import { Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { z } from 'zod';
+
+// Strict validation schema for user sync
+const userSyncSchema = z.object({
+  first_name: z.string().min(1).max(50).optional(),
+  last_name: z.string().min(1).max(50).optional(),
+  phone: z.string().regex(/^\+?[\d\s-()]+$/).optional(),
+  date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  membership_plan: z.enum(['basic', 'premium', 'enterprise']).optional(),
+  location: z.string().max(100).optional()
+}).strict();
 
 /**
- * Sync Firebase user to Supabase
- * Creates or updates user profile in Supabase database
+ * Sync Firebase user to Supabase (SECURE VERSION)
+ * Creates or updates user profile in Supabase database with strict validation
  *
  * POST /api/auth/sync-user
  */
 export const syncUser = async (req: AuthRequest, res: Response) => {
   try {
     const { uid, email } = req.user!;
-    const { first_name, last_name, phone, date_of_birth, membership_plan, location } = req.body;
+
+    // ❌ CRITICAL FIX: Validate input strictly
+    const validatedData = userSyncSchema.parse(req.body);
+
+    // ❌ CRITICAL FIX: Only allow specific fields
+    const { first_name, last_name, phone, date_of_birth, membership_plan, location } = validatedData;
 
     // Check if user exists
     const { data: existingUser } = await supabase
@@ -29,19 +46,23 @@ export const syncUser = async (req: AuthRequest, res: Response) => {
     let userData;
 
     if (existingUser) {
-      // Update existing user
+      // ❌ CRITICAL FIX: Only update allowed fields with validation
+      const updateData: any = {
+        email,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only update fields that were provided and validated
+      if (first_name !== undefined) updateData.first_name = first_name;
+      if (last_name !== undefined) updateData.last_name = last_name;
+      if (phone !== undefined) updateData.phone = phone;
+      if (date_of_birth !== undefined) updateData.date_of_birth = date_of_birth;
+      if (membership_plan !== undefined) updateData.membership_plan = membership_plan;
+      if (location !== undefined) updateData.location = location;
+
       const { data, error } = await supabase
         .from('users')
-        .update({
-          email,
-          first_name: first_name || existingUser.first_name,
-          last_name: last_name || existingUser.last_name,
-          phone,
-          date_of_birth,
-          membership_plan: membership_plan || 'basic',
-          location,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('firebase_uid', uid)
         .select()
         .single();
@@ -50,19 +71,25 @@ export const syncUser = async (req: AuthRequest, res: Response) => {
       userData = data;
       console.log(`✅ User updated: ${uid}`);
     } else {
-      // Create new user
+      // ❌ CRITICAL FIX: Only insert validated fields
+      const insertData: any = {
+        firebase_uid: uid,
+        email,
+        membership_plan: membership_plan || 'basic',
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only add optional fields if they were provided
+      if (first_name) insertData.first_name = first_name;
+      if (last_name) insertData.last_name = last_name;
+      if (phone) insertData.phone = phone;
+      if (date_of_birth) insertData.date_of_birth = date_of_birth;
+      if (location) insertData.location = location;
+      else insertData.location = '';
+
       const { data, error } = await supabase
         .from('users')
-        .insert({
-          firebase_uid: uid,
-          email,
-          first_name: first_name || 'User',
-          last_name: last_name || '',
-          phone,
-          date_of_birth,
-          membership_plan: membership_plan || 'basic',
-          location: location || '',
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -73,90 +100,133 @@ export const syncUser = async (req: AuthRequest, res: Response) => {
 
     return res.json({
       success: true,
-      user: userData,
+      message: 'User synced successfully',
+      user: userData
     });
-  } catch (err: any) {
-    console.error('[SYNC USER ERROR]', err.message);
+
+  } catch (error: any) {
+    console.error('❌ User sync error:', error);
+
+    // ❌ CRITICAL FIX: Proper error handling without information leakage
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid input',
+        message: 'Request contains invalid data',
+        details: error.issues
+      });
+    }
+
     return res.status(500).json({
-      error: 'Failed to sync user',
-      message: err.message,
+      success: false,
+      error: 'Internal server error',
+      message: 'User sync failed'
     });
   }
 };
 
 /**
- * Get current user profile
- *
+ * Get user profile (SECURE VERSION)
+ * 
  * GET /api/auth/me
  */
-export const getMe = async (req: AuthRequest, res: Response) => {
+export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
     const { uid } = req.user!;
 
-    const { data, error } = await supabase
+    const { data: user, error } = await supabase
       .from('users')
-      .select('*')
+      .select('id, firebase_uid, email, first_name, last_name, phone, date_of_birth, membership_plan, location, created_at, updated_at')
       .eq('firebase_uid', uid)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'User not found',
-          message: 'User profile does not exist. Please sync user first.',
-        });
-      }
-      throw error;
+    if (error || !user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+        message: 'User profile not found'
+      });
     }
 
-    return res.json(data);
-  } catch (err: any) {
-    console.error('[GET ME ERROR]', err.message);
+    return res.json({
+      success: true,
+      user
+    });
+
+  } catch (error: any) {
+    console.error('❌ Get profile error:', error);
+
     return res.status(500).json({
-      error: 'Failed to fetch user',
-      message: err.message,
+      success: false,
+      error: 'Internal server error',
+      message: 'Failed to get user profile'
     });
   }
 };
 
 /**
- * Update user profile
- *
- * PATCH /api/auth/me
+ * Update user profile (SECURE VERSION)
+ * 
+ * PUT /api/auth/profile
  */
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
     const { uid } = req.user!;
-    const updates = req.body;
 
-    // Remove fields that shouldn't be updated directly
-    delete updates.firebase_uid;
-    delete updates.id;
-    delete updates.created_at;
+    // ❌ CRITICAL FIX: Validate input strictly
+    const validatedData = userSyncSchema.parse(req.body);
 
-    const { data, error } = await supabase
+    // ❌ CRITICAL FIX: Only update allowed fields
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    const { first_name, last_name, phone, date_of_birth, membership_plan, location } = validatedData;
+
+    if (first_name !== undefined) updateData.first_name = first_name;
+    if (last_name !== undefined) updateData.last_name = last_name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (date_of_birth !== undefined) updateData.date_of_birth = date_of_birth;
+    if (membership_plan !== undefined) updateData.membership_plan = membership_plan;
+    if (location !== undefined) updateData.location = location;
+
+    const { data: user, error } = await supabase
       .from('users')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('firebase_uid', uid)
-      .select()
+      .select('id, firebase_uid, email, first_name, last_name, phone, date_of_birth, membership_plan, location, created_at, updated_at')
       .single();
 
-    if (error) throw error;
-
-    console.log(`✅ Profile updated: ${uid}`);
+    if (error || !user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+        message: 'User profile not found'
+      });
+    }
 
     return res.json({
       success: true,
-      user: data,
+      message: 'Profile updated successfully',
+      user
     });
-  } catch (err: any) {
-    console.error('[UPDATE PROFILE ERROR]', err.message);
+
+  } catch (error: any) {
+    console.error('❌ Update profile error:', error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid input',
+        message: 'Request contains invalid data',
+        details: error.issues
+      });
+    }
+
     return res.status(500).json({
-      error: 'Failed to update profile',
-      message: err.message,
+      success: false,
+      error: 'Internal server error',
+      message: 'Failed to update profile'
     });
   }
 };

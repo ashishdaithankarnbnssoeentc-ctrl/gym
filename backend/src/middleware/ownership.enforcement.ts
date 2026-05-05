@@ -63,7 +63,7 @@ class OwnershipEnforcement {
       }
 
       // Attach ownership enforcement function to request
-      req.enforcedQuery = (query: any) => {
+      (req as any).enforcedQuery = (query: any) => {
         return this.enforceOwnership(query, req.user, resourceType);
       };
 
@@ -79,7 +79,7 @@ class OwnershipEnforcement {
       // This would typically query the database to verify ownership
       // For now, implement basic tenant-based check
       const hasAccess = await this.checkUserResourceAccess(userId, tenantId, resourceId, resourceType);
-      
+
       return { valid: hasAccess };
     } catch (error) {
       return { valid: false, error: 'Ownership verification failed' };
@@ -103,7 +103,7 @@ class OwnershipEnforcement {
 
     // Remove dangerous properties
     const dangerousKeys = ['__proto__', 'constructor', 'prototype', 'tenant_id', 'user_id'];
-    
+
     for (const key of dangerousKeys) {
       delete safeParams[key];
     }

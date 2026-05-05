@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyFirebaseToken } from '../firebase.js';
+import { logMissingTenantContext, logDatabaseTenantContextIssue } from '../lib/security.logger.js';
 
 // Extend Request interface to include tenant info
 declare global {
@@ -126,6 +127,23 @@ export function withTenantContext(handler: (req: Request, res: Response, queryBu
       next(error);
     }
   };
+}
+
+// Tenant validation middleware for cross-tenant operations
+// Tenant context assertion - fail fast if no tenant context
+export function assertTenantContext(req: Request): void {
+  if (!req.tenant || !req.tenant.id) {
+    logMissingTenantContext(req);
+    throw new Error('Missing tenant context');
+  }
+}
+
+// Stronger check for database client tenant context
+export function assertDatabaseTenantSet(clientHasTenantSet: boolean, operation: string = 'database operation'): void {
+  if (!clientHasTenantSet) {
+    logDatabaseTenantContextIssue(operation);
+    throw new Error('SET LOCAL app.tenant_id not applied');
+  }
 }
 
 // Tenant validation middleware for cross-tenant operations

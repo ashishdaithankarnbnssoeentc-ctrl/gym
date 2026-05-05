@@ -46,7 +46,7 @@ class SecurityMiddleware {
         .replace(/on\w+\s*=/gi, '')
         .trim();
     }
-    
+
     if (typeof input === 'object' && input !== null) {
       const sanitized: any = {};
       for (const [key, value] of Object.entries(input)) {
@@ -58,7 +58,7 @@ class SecurityMiddleware {
       }
       return sanitized;
     }
-    
+
     return input;
   }
 
@@ -128,7 +128,7 @@ class SecurityMiddleware {
     // This would typically involve checking ownership or permissions
     // For now, we'll implement basic tenant isolation
     const resourceTenantId = req.query.tenant_id as string;
-    
+
     if (resourceTenantId && resourceTenantId !== tenantId) {
       return { valid: false, error: 'Cross-tenant access denied' };
     }
@@ -177,7 +177,7 @@ class SecurityMiddleware {
 
     // Increment attempt count
     attempts.count++;
-    
+
     // Lock out if too many attempts
     if (attempts.count >= this.config.maxLoginAttempts) {
       attempts.lockUntil = now + this.config.loginLockoutTime;
@@ -207,7 +207,7 @@ class SecurityMiddleware {
   requestSizeLimit() {
     return (req: Request, res: Response, next: NextFunction) => {
       const contentLength = req.get('content-length');
-      
+
       if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) { // 10MB
         return res.status(413).json({
           error: 'Request too large',
@@ -255,14 +255,14 @@ class SecurityMiddleware {
     return [
       // Apply security headers
       this.securityHeaders(),
-      
+
       // Request size limiting
       this.requestSizeLimit(),
-      
+
       // Input validation and sanitization
       (req: Request, res: Response, next: NextFunction) => {
         const validation = this.validateQuery(req);
-        
+
         if (!validation.valid) {
           console.warn(`[SECURITY] Input validation failed:`, validation.errors);
           return res.status(400).json({
@@ -271,19 +271,19 @@ class SecurityMiddleware {
             details: validation.errors
           });
         }
-        
+
         // Attach sanitized query to request
         req.query = validation.sanitized;
         next();
       },
-      
+
       // IDOR protection for sensitive routes
       (req: Request, res: Response, next: NextFunction) => {
         const resourceId = req.params.id || req.params.userId;
-        
+
         if (resourceId) {
-          const idorCheck = this.checkIDOR(req, resourceId);
-          
+          const idorCheck = this.checkIDOR(req, resourceId as string);
+
           if (!idorCheck.valid) {
             console.warn(`[SECURITY] IDOR attempt blocked:`, {
               ip: req.ip,
@@ -291,14 +291,14 @@ class SecurityMiddleware {
               resourceId,
               error: idorCheck.error
             });
-            
+
             return res.status(403).json({
               error: 'Access denied',
               message: 'You do not have permission to access this resource'
             });
           }
         }
-        
+
         next();
       }
     ];

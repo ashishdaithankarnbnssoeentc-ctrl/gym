@@ -14,6 +14,7 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { initSentry, requestTrackingMiddleware, errorHandlerMiddleware } from './sentry.js';
 import { requireAuth } from './middleware/auth.js';
+import { enhancedAuth } from './middleware/auth.enhanced.js';
 import { requireActiveMembership } from './middleware/global.membership.middleware.js';
 import { envValidator } from './config/env.validation.js';
 import { performanceMonitor } from './middleware/performance.monitoring.js';
@@ -195,7 +196,7 @@ app.use('/api/favorites', requireActiveMembership);
 app.use('/api/content', requireActiveMembership);
 app.use('/api/proposals', requireActiveMembership);
 
-// SaaS Management Routes (with admin role validation)
+// SaaS Management Routes (with standard auth for compatibility)
 app.use('/api/admin', requireAuth, (await import('./routes/admin.routes.js')).default);
 app.use('/api/admin/notifications', requireAuth, (await import('./routes/admin.notifications.routes.js')).default);
 app.use('/api/admin/analytics', requireAuth, (await import('./routes/admin.analytics.routes.js')).default);

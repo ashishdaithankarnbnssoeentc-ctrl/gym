@@ -6,7 +6,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { sign, verify } from 'jsonwebtoken';
+import pkg from 'jsonwebtoken';
+const { sign, verify } = pkg;
 import { verifyFirebaseToken } from '../firebase.js';
 
 interface AuthCookieConfig {
@@ -45,7 +46,7 @@ class SecureAuthCookies {
    * Create secure JWT token
    */
   private createToken(payload: any): string {
-    return sign(payload, this.config.secret, { expiresIn: this.config.expiresIn });
+    return sign(payload, this.config.secret as string, { expiresIn: this.config.expiresIn });
   }
 
   /**
@@ -207,14 +208,15 @@ class SecureAuthCookies {
         }
 
         // Attach user info to request
-        req.user = {
-          id: decoded.uid,
-          email: decoded.email,
-          tenantId: decoded.tenantId,
-          uid: decoded.uid,
-          name: decoded.name,
-          picture: decoded.picture,
-          role: decoded.role
+        const jwtPayload = decoded as any;
+        (req.user as any) = {
+          id: jwtPayload.uid,
+          email: jwtPayload.email,
+          tenantId: jwtPayload.tenantId,
+          uid: jwtPayload.uid,
+          name: jwtPayload.name,
+          picture: jwtPayload.picture,
+          role: jwtPayload.role
         };
 
         next();

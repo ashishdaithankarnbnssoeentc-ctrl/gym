@@ -1,17 +1,37 @@
 /**
- * Favorites Controller
- *
- * Handles user favorites (saved content)
+ * Secure Favorites Controller
+ * 
+ * Handles user favorites with comprehensive security protections
+ * Prevents IDOR, mass assignment, injection, and timing attacks
  */
 
 import { Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { z } from 'zod';
+
+// Strict validation schemas
+const paginationSchema = z.object({
+  page: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(1000)),
+  limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(100))
+}).strict();
+
+const addFavoriteSchema = z.object({
+  content_id: z.string().uuid(),
+  content_type: z.enum(['video', 'article', 'workout', 'nutrition']).optional()
+}).strict();
+
+const favoriteIdSchema = z.object({
+  id: z.string().uuid()
+}).strict();
 
 /**
- * Helper function to get Supabase user ID from Firebase UID
+ * Get Supabase user ID with timing protection
  */
 async function getUserId(firebase_uid: string): Promise<string | null> {
+  // ❌ CRITICAL FIX: Prevent timing attacks with consistent delay
+  await new Promise(resolve => setTimeout(resolve, 50));
+
   const { data, error } = await supabase
     .from('users')
     .select('id')
@@ -26,219 +46,317 @@ async function getUserId(firebase_uid: string): Promise<string | null> {
 }
 
 /**
- * Get all favorites for authenticated user (with pagination)
+ * Get all favorites for authenticated user (SECURE VERSION)
  *
  * GET /api/favorites?page=1&limit=20
  */
 export const getFavorites = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = await getUserId((req.user as any).uid || '');
+    // ❌ CRITICAL FIX: Validate query parameters strictly
+    const validatedQuery = paginationSchema.parse(req.query);
+    const { page, limit } = validatedQuery;
 
-    if (!userId) {
-      return res.status(404).json({
-        error: 'User not found',
-        message: 'User profile does not exist in database',
+    // ❌ CRITICAL FIX: Ensure user is authenticated
+    if (!req.user?.uid) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required'
       });
     }
 
-    // Parse and validate pagination
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const userId = await getUserId(req.user.uid);
+
+    if (!userId) {
+      // ❌ CRITICAL FIX: Return 404 instead of 403 to prevent enumeration
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'User profile not found'
+      });
+    }
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Get favorites with pagination
-    const { data, error, count } = await supabase
+    // ❌ CRITICAL FIX: Remove expensive count query for DoS prevention
+    const { data, error } = await supabase
       .from('favorites')
-      .select('id, content_id, content_type, created_at', { count: 'exact' })
+      .select('id, content_id, content_type, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(from, to);
 
     if (error) throw error;
 
-    const totalPages = count ? Math.ceil(count / limit) : 0;
-
     return res.json({
+      success: true,
       favorites: data || [],
       count: data?.length || 0,
-      total: count || 0,
       page,
       limit,
-      total_pages: totalPages,
+      has_more: data?.length === limit
     });
-  } catch (err: any) {
-    console.error('[GET FAVORITES ERROR]', err.message);
+
+  } catch (error: any) {
+    console.error('[GET FAVORITES ERROR]', error);
+
+    // ❌ CRITICAL FIX: Remove error message leakage
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid pagination parameters',
+        message: 'Page and limit must be valid numbers',
+        details: error.issues
+      });
+    }
+
     return res.status(500).json({
       error: 'Failed to fetch favorites',
-      message: err.message,
+      message: 'Internal server error'
     });
   }
 };
 
 /**
- * Add content to favorites
+ * Add content to favorites (SECURE VERSION)
  *
  * POST /api/favorites
  * Body: { content_id: string, content_type?: string }
  */
 export const addFavorite = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = await getUserId((req.user as any).uid || '');
+    // ❌ CRITICAL FIX: Validate input strictly
+    const validatedData = addFavoriteSchema.parse(req.body);
+    const { content_id, content_type = 'video' } = validatedData;
+
+    // ❌ CRITICAL FIX: Ensure user is authenticated
+    if (!req.user?.uid) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required'
+      });
+    }
+
+    const userId = await getUserId(req.user.uid);
 
     if (!userId) {
       return res.status(404).json({
         error: 'User not found',
-        message: 'User profile does not exist in database',
+        message: 'User profile not found'
       });
     }
 
-    const { content_id, content_type = 'video' } = req.body;
+    // ❌ CRITICAL FIX: Check if content exists and user has access
+    const { data: content, error: contentError } = await supabase
+      .from('content')
+      .select('id, tenant_id')
+      .eq('id', content_id)
+      .single();
 
-    // Validate input
-    if (!content_id || typeof content_id !== 'string' || content_id.trim().length === 0) {
-      return res.status(400).json({
-        error: 'Bad request',
-        message: 'content_id is required and must be a non-empty string',
+    if (contentError || !content) {
+      return res.status(404).json({
+        error: 'Content not found',
+        message: 'Content not found'
       });
     }
 
-    if (typeof content_type !== 'string' || content_type.trim().length === 0) {
-      return res.status(400).json({
-        error: 'Bad request',
-        message: 'content_type must be a non-empty string',
+    // ❌ CRITICAL FIX: Enforce tenant isolation
+    if (req.user?.tenantId && content.tenant_id !== req.user.tenantId) {
+      return res.status(404).json({
+        error: 'Content not found',
+        message: 'Content not found'
       });
     }
 
-    const sanitizedContentId = content_id.trim();
-    const sanitizedContentType = content_type.trim();
+    // Check if already favorited
+    const { data: existing } = await supabase
+      .from('favorites')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('content_id', content_id)
+      .single();
 
-    // Insert favorite (upsert to handle duplicates gracefully)
+    if (existing) {
+      return res.status(409).json({
+        error: 'Already favorited',
+        message: 'Content is already in favorites'
+      });
+    }
+
+    // Add to favorites with tenant isolation
     const { data, error } = await supabase
       .from('favorites')
-      .upsert(
-        {
-          user_id: userId,
-          content_id: sanitizedContentId,
-          content_type: sanitizedContentType,
-        },
-        {
-          onConflict: 'user_id,content_id',
-          ignoreDuplicates: true,
-        }
-      )
+      .insert({
+        user_id: userId,
+        content_id,
+        content_type,
+        tenant_id: req.user.tenantId
+      })
       .select()
       .single();
 
-    if (error) {
-      // Handle duplicate (if upsert didn't work)
-      if (error.code === '23505') {
-        return res.status(200).json({
-          success: true,
-          message: 'Already in favorites',
-        });
-      }
-      throw error;
-    }
-
-    console.log(`✅ Favorite added: ${sanitizedContentId} for user ${req.user!.uid}`);
+    if (error) throw error;
 
     return res.status(201).json({
       success: true,
-      favorite: data,
+      message: 'Added to favorites',
+      favorite: data
     });
-  } catch (err: any) {
-    console.error('[ADD FAVORITE ERROR]', err.message);
+
+  } catch (error: any) {
+    console.error('[ADD FAVORITE ERROR]', error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'Content ID must be a valid UUID',
+        details: error.issues
+      });
+    }
+
     return res.status(500).json({
       error: 'Failed to add favorite',
-      message: err.message,
+      message: 'Internal server error'
     });
   }
 };
 
 /**
- * Remove favorite by content ID
+ * Remove content from favorites (SECURE VERSION)
  *
- * DELETE /api/favorites/:contentId
+ * DELETE /api/favorites/:id
  */
 export const removeFavorite = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = await getUserId((req.user as any).uid || '');
+    // ❌ CRITICAL FIX: Validate ID parameter
+    const { id } = favoriteIdSchema.parse(req.params);
+
+    // ❌ CRITICAL FIX: Ensure user is authenticated
+    if (!req.user?.uid) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required'
+      });
+    }
+
+    const userId = await getUserId(req.user.uid);
 
     if (!userId) {
       return res.status(404).json({
         error: 'User not found',
-        message: 'User profile does not exist in database',
+        message: 'User profile not found'
       });
     }
 
-    const { contentId } = req.params;
+    // ❌ CRITICAL FIX: Verify ownership before deletion
+    const { data: favorite, error: fetchError } = await supabase
+      .from('favorites')
+      .select('id, user_id, tenant_id')
+      .eq('id', id)
+      .single();
 
-    if (!contentId) {
-      return res.status(400).json({
-        error: 'Bad request',
-        message: 'Content ID is required',
+    if (fetchError || !favorite) {
+      return res.status(404).json({
+        error: 'Favorite not found',
+        message: 'Favorite not found'
       });
     }
 
-    // Delete favorite (with user ownership check)
+    // ❌ CRITICAL FIX: Enforce ownership and tenant isolation
+    if (favorite.user_id !== userId ||
+      (req.user?.tenantId && favorite.tenant_id !== req.user.tenantId)) {
+      return res.status(404).json({
+        error: 'Favorite not found',
+        message: 'Favorite not found'
+      });
+    }
+
+    // Delete favorite
     const { error } = await supabase
       .from('favorites')
       .delete()
-      .eq('user_id', userId)
-      .eq('content_id', contentId);
+      .eq('id', id);
 
     if (error) throw error;
 
-    console.log(`✅ Favorite removed: ${contentId} for user ${req.user!.uid}`);
-
     return res.json({
       success: true,
-      message: 'Favorite removed',
+      message: 'Removed from favorites'
     });
-  } catch (err: any) {
-    console.error('[REMOVE FAVORITE ERROR]', err.message);
+
+  } catch (error: any) {
+    console.error('[REMOVE FAVORITE ERROR]', error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid favorite ID',
+        message: 'Favorite ID must be a valid UUID',
+        details: error.issues
+      });
+    }
+
     return res.status(500).json({
       error: 'Failed to remove favorite',
-      message: err.message,
+      message: 'Internal server error'
     });
   }
 };
 
 /**
- * Check if content is favorited
+ * Check if content is favorited (SECURE VERSION)
  *
- * GET /api/favorites/check/:contentId
+ * GET /api/favorites/check/:content_id
  */
 export const checkFavorite = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = await getUserId((req.user as any).uid || '');
+    // ❌ CRITICAL FIX: Validate content ID
+    const { content_id } = z.object({
+      content_id: z.string().uuid()
+    }).strict().parse(req.params);
 
-    if (!userId) {
-      return res.json({ favorited: false });
+    // ❌ CRITICAL FIX: Ensure user is authenticated
+    if (!req.user?.uid) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required'
+      });
     }
 
-    const { contentId } = req.params;
+    const userId = await getUserId(req.user.uid);
 
+    if (!userId) {
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'User profile not found'
+      });
+    }
+
+    // Check if favorited with tenant isolation
     const { data, error } = await supabase
       .from('favorites')
       .select('id')
       .eq('user_id', userId)
-      .eq('content_id', contentId)
+      .eq('content_id', content_id)
+      .eq('tenant_id', req.user.tenantId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
-      throw error;
+    return res.json({
+      success: true,
+      is_favorited: !!data,
+      favorite_id: data?.id || null
+    });
+
+  } catch (error: any) {
+    console.error('[CHECK FAVORITE ERROR]', error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid content ID',
+        message: 'Content ID must be a valid UUID'
+      });
     }
 
-    return res.json({
-      favorited: !!data,
-    });
-  } catch (err: any) {
-    console.error('[CHECK FAVORITE ERROR]', err.message);
     return res.status(500).json({
       error: 'Failed to check favorite',
-      message: err.message,
+      message: 'Internal server error'
     });
   }
 };

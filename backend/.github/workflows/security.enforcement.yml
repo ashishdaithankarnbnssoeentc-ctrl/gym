@@ -1,0 +1,42 @@
+name: Security Enforcement CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-enforcement:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: |
+        cd backend
+        npm ci
+        
+    - name: Run security enforcement checks
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: |
+        cd backend
+        node scripts/security.enforcement.ci.js
+        
+    - name: Upload security report
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: backend/security-report.json
+        retention-days: 30

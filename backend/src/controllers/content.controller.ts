@@ -1,16 +1,31 @@
 /**
- * Content Controller
- *
- * Handles content retrieval, search, and filtering
+ * Secure Content Controller
+ * 
+ * Handles content retrieval, search, and filtering with strict security
+ * Prevents SQL injection, XSS, and IDOR attacks
  */
 
 import { Request, Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { trackApiCall, trackError, trackPerformance } from '../sentry.js';
 import { recordMediaFailure } from '../middleware/media.validation.middleware.js';
+import { z } from 'zod';
+
+// Strict validation schemas
+const contentQuerySchema = z.object({
+  category: z.string().max(50).regex(/^[a-zA-Z0-9\s_-]+$/).optional(),
+  limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(50)),
+  offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0)),
+  search: z.string().max(100).regex(/^[a-zA-Z0-9\s_-]+$/).optional(),
+  tags: z.array(z.string().max(20)).max(3).optional()
+}).strict();
+
+const contentIdSchema = z.object({
+  id: z.string().uuid()
+}).strict();
 
 /**
- * Get all content with optional filtering
+ * Get all content with optional filtering (SECURE VERSION)
  *
  * GET /api/content?category=cardio&limit=20
  */
@@ -18,32 +33,45 @@ export const getContent = async (req: Request, res: Response) => {
   const startTime = Date.now();
 
   try {
-    const { category, limit = '20', offset = '0' } = req.query;
+    // ❌ CRITICAL FIX: Validate query parameters strictly
+    const validatedQuery = contentQuerySchema.parse(req.query);
+    const { category, limit, offset, search, tags } = validatedQuery;
 
     // Track API call
     trackApiCall('/api/content', 'GET', req.user?.id);
+
+    // ❌ CRITICAL FIX: Ensure user is authenticated for tenant isolation
+    if (!req.user?.tenantId) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required for content access'
+      });
+    }
 
     let query = supabase
       .from('content')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false });
 
-    // CRITICAL: Add tenant filtering for SaaS isolation
-    // This prevents cross-tenant data access
-    if (req.user?.tenantId) {
-      query = query.eq('tenant_id', req.user.tenantId);
-    }
+    // ❌ CRITICAL FIX: Enforce tenant isolation (MANDATORY)
+    query = query.eq('tenant_id', req.user.tenantId);
 
-    // Apply filters
-    if (category && typeof category === 'string') {
+    // Apply filters with validation
+    if (category) {
       query = query.eq('category', category);
     }
 
-    // Apply pagination
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string)));
-    const offsetNum = Math.max(0, parseInt(offset as string));
+    if (search) {
+      // ❌ CRITICAL FIX: Safe search implementation
+      query = query.ilike('title', `%${search}%`);
+    }
 
-    query = query.range(offsetNum, offsetNum + limitNum - 1);
+    if (tags && tags.length > 0) {
+      query = query.contains('tags', tags);
+    }
+
+    // Apply pagination with validated limits
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 
@@ -51,219 +79,260 @@ export const getContent = async (req: Request, res: Response) => {
 
     // Track performance
     const duration = Date.now() - startTime;
-    trackPerformance('get_content', duration);
+    trackPerformance('getContent', duration);
 
     return res.json({
-      content: data || [],
-      count: data?.length || 0,
-      total: count || 0,
-      limit: limitNum,
-      offset: offsetNum,
-    });
-  } catch (err: any) {
-    console.error('[GET CONTENT ERROR]', err.message);
-    console.error('[GET CONTENT ERROR DETAILS]', {
-      error: err,
-      stack: err.stack,
-      details: err.details
+      success: true,
+      data: data || [],
+      pagination: {
+        limit,
+        offset,
+        total: count || 0,
+        hasMore: (offset + limit) < (count || 0)
+      }
     });
 
-    // Track error in Sentry
-    trackError(err, {
-      endpoint: '/api/content',
-      method: 'GET',
-      query: req.query,
-      user: req.user?.id
-    });
+  } catch (error: any) {
+    console.error('❌ Get content error:', error);
+    trackError(error, { path: '/api/content', method: 'GET', userId: req.user?.id });
+
+    // ❌ CRITICAL FIX: Proper error handling
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid query parameters',
+        message: 'Request contains invalid parameters',
+        details: error.issues
+      });
+    }
 
     return res.status(500).json({
-      error: 'Failed to fetch content',
-      message: err.message,
+      error: 'Internal server error',
+      message: 'Failed to retrieve content'
     });
   }
 };
 
 /**
- * Get single content by ID
+ * Get content by ID (SECURE VERSION)
  *
  * GET /api/content/:id
  */
 export const getContentById = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
+  const startTime = Date.now();
 
-    let query = supabase
+  try {
+    // ❌ CRITICAL FIX: Validate ID parameter
+    const { id } = contentIdSchema.parse(req.params);
+
+    // ❌ CRITICAL FIX: Ensure user is authenticated
+    if (!req.user?.tenantId) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required for content access'
+      });
+    }
+
+    // Track API call
+    trackApiCall('/api/content/:id', 'GET', req.user?.id);
+
+    // ❌ CRITICAL FIX: Enforce tenant isolation and ownership
+    const { data, error } = await supabase
       .from('content')
       .select('*')
-      .eq('id', id);
+      .eq('id', id)
+      .eq('tenant_id', req.user.tenantId)  // Mandatory tenant check
+      .single();
 
-    // CRITICAL: Add tenant filtering for SaaS isolation
-    if (req.user?.tenantId) {
-      query = query.eq('tenant_id', req.user.tenantId);
+    if (error || !data) {
+      // Return 404 instead of 403 to prevent IDOR enumeration
+      return res.status(404).json({
+        error: 'Content not found',
+        message: 'Content not found'
+      });
     }
 
-    const { data, error } = await query.single();
+    // Track performance
+    const duration = Date.now() - startTime;
+    trackPerformance('getContentById', duration);
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Not found',
-          message: 'Content not found',
-        });
-      }
-      throw error;
+    return res.json({
+      success: true,
+      data
+    });
+
+  } catch (error: any) {
+    console.error('❌ Get content by ID error:', error);
+    trackError(error, { path: '/api/content/:id', method: 'GET', userId: req.user?.id });
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid content ID',
+        message: 'Content ID must be a valid UUID',
+        details: error.issues
+      });
     }
 
-    // Validate media URLs and record failures if needed
-    const content = data;
-    if (content?.thumbnail_url || content?.video_url) {
-      try {
-        // Check thumbnail URL availability (async, non-blocking)
-        if (content.thumbnail_url) {
-          const thumbnailCheck = await fetch(content.thumbnail_url, { method: 'HEAD' });
-          if (!thumbnailCheck.ok) {
-            recordMediaFailure(
-              content.id,
-              content.thumbnail_url,
-              content.video_url || '',
-              { response: { status: thumbnailCheck.status } }
-            );
-            console.log(`[CONTENT] Thumbnail failed for content ${content.id}: ${content.thumbnail_url}`);
-          }
-        }
-
-        // Check video URL availability (async, non-blocking)
-        if (content.video_url) {
-          const videoCheck = await fetch(content.video_url, { method: 'HEAD' });
-          if (!videoCheck.ok) {
-            recordMediaFailure(
-              content.id,
-              content.thumbnail_url || '',
-              content.video_url,
-              { response: { status: videoCheck.status } }
-            );
-            console.log(`[CONTENT] Video failed for content ${content.id}: ${content.video_url}`);
-          }
-        }
-      } catch (mediaError: any) {
-        // Network errors during media validation
-        recordMediaFailure(
-          content.id,
-          content.thumbnail_url || '',
-          content.video_url || '',
-          mediaError
-        );
-        console.log(`[CONTENT] Media validation error for content ${content.id}:`, mediaError.message);
-      }
-    }
-
-    return res.json(data);
-  } catch (err: any) {
-    console.error('[GET CONTENT BY ID ERROR]', err.message);
     return res.status(500).json({
-      error: 'Failed to fetch content',
-      message: err.message,
+      error: 'Internal server error',
+      message: 'Failed to retrieve content'
     });
   }
 };
 
 /**
- * Search content by title, description, or tags
+ * Search content (SECURE VERSION)
  *
- * GET /api/content/search?q=hiit&category=cardio&limit=20
+ * GET /api/content/search?q=workout
  */
 export const searchContent = async (req: Request, res: Response) => {
-  try {
-    const { q, category, limit = '20', offset = '0' } = req.query;
+  const startTime = Date.now();
 
-    if (!q || typeof q !== 'string' || q.trim().length === 0) {
-      return res.status(400).json({
-        error: 'Bad request',
-        message: 'Search query (q) is required and must be a non-empty string',
+  try {
+    // ❌ CRITICAL FIX: Validate search parameters
+    const searchSchema = z.object({
+      q: z.string().min(1).max(100).regex(/^[a-zA-Z0-9\s_-]+$/),
+      category: z.string().max(50).regex(/^[a-zA-Z0-9\s_-]+$/).optional(),
+      limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(50)),
+      offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0))
+    }).strict();
+
+    const { q, category, limit, offset } = searchSchema.parse(req.query);
+
+    // ❌ CRITICAL FIX: Ensure user is authenticated
+    if (!req.user?.tenantId) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required for content search'
       });
     }
 
-    const searchQuery = q.trim();
+    // Track API call
+    trackApiCall('/api/content/search', 'GET', req.user?.id);
 
-    // Build search query
     let query = supabase
       .from('content')
       .select('*', { count: 'exact' })
-      .or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`)
-      .order('created_at', { ascending: false });
+      .ilike('title', `%${q}%`)
+      .eq('tenant_id', req.user.tenantId);  // Mandatory tenant check
 
-    // CRITICAL: Add tenant filtering for SaaS isolation
-    if (req.user?.tenantId) {
-      query = query.eq('tenant_id', req.user.tenantId);
-    }
-
-    // Apply category filter
-    if (category && typeof category === 'string') {
+    if (category) {
       query = query.eq('category', category);
     }
 
-    // Apply pagination
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string)));
-    const offsetNum = Math.max(0, parseInt(offset as string));
-
-    query = query.range(offsetNum, offsetNum + limitNum - 1);
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 
     if (error) throw error;
 
+    // Track performance
+    const duration = Date.now() - startTime;
+    trackPerformance('searchContent', duration);
+
     return res.json({
-      results: data || [],
-      count: data?.length || 0,
-      total: count || 0,
-      query: searchQuery,
-      limit: limitNum,
-      offset: offsetNum,
+      success: true,
+      data: data || [],
+      pagination: {
+        limit,
+        offset,
+        total: count || 0,
+        hasMore: (offset + limit) < (count || 0)
+      },
+      query: q
     });
-  } catch (err: any) {
-    console.error('[SEARCH CONTENT ERROR]', err.message);
+
+  } catch (error: any) {
+    console.error('❌ Search content error:', error);
+    trackError(error, { path: '/api/content/search', method: 'GET', userId: req.user?.id });
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid search parameters',
+        message: 'Request contains invalid search parameters',
+        details: error.issues
+      });
+    }
+
     return res.status(500).json({
-      error: 'Search failed',
-      message: err.message,
+      error: 'Internal server error',
+      message: 'Failed to search content'
     });
   }
 };
 
 /**
- * Get content by category
+ * Get content by category (SECURE VERSION)
  *
  * GET /api/content/category/:category
  */
 export const getContentByCategory = async (req: Request, res: Response) => {
-  try {
-    const { category } = req.params;
-    const { limit = '20', offset = '0' } = req.query;
+  const startTime = Date.now();
 
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string)));
-    const offsetNum = Math.max(0, parseInt(offset as string));
+  try {
+    const categorySchema = z.object({
+      category: z.string().max(50).regex(/^[a-zA-Z0-9\s_-]+$/),
+      limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(50)),
+      offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0))
+    }).strict();
+
+    const { category, limit, offset } = categorySchema.parse({
+      category: req.params.category,
+      limit: req.query.limit || '20',
+      offset: req.query.offset || '0'
+    });
+
+    // ❌ CRITICAL FIX: Ensure user is authenticated
+    if (!req.user?.tenantId) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'User authentication required for content access'
+      });
+    }
+
+    // Track API call
+    trackApiCall('/api/content/category/:category', 'GET', req.user?.id);
 
     const { data, error, count } = await supabase
       .from('content')
       .select('*', { count: 'exact' })
       .eq('category', category)
+      .eq('tenant_id', req.user.tenantId)  // Mandatory tenant check
       .order('created_at', { ascending: false })
-      .range(offsetNum, offsetNum + limitNum - 1);
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
+    // Track performance
+    const duration = Date.now() - startTime;
+    trackPerformance('getContentByCategory', duration);
+
     return res.json({
-      content: data || [],
-      count: data?.length || 0,
-      total: count || 0,
-      category,
-      limit: limitNum,
-      offset: offsetNum,
+      success: true,
+      data: data || [],
+      pagination: {
+        limit,
+        offset,
+        total: count || 0,
+        hasMore: (offset + limit) < (count || 0)
+      },
+      category
     });
-  } catch (err: any) {
-    console.error('[GET CONTENT BY CATEGORY ERROR]', err.message);
+
+  } catch (error: any) {
+    console.error('❌ Get content by category error:', error);
+    trackError(error, { path: '/api/content/category/:category', method: 'GET', userId: req.user?.id });
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid category parameters',
+        message: 'Request contains invalid category parameters',
+        details: error.issues
+      });
+    }
+
     return res.status(500).json({
-      error: 'Failed to fetch content',
-      message: err.message,
+      error: 'Internal server error',
+      message: 'Failed to retrieve content by category'
     });
   }
 };

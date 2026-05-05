@@ -103,7 +103,7 @@ class MassAssignmentPrevention {
       return { valid: true, sanitized: validated, errors: [] };
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        errors.push(...error.errors.map(err => `${err.path.join('.')}: ${err.message}`));
+        errors.push(...error.issues.map(err => `${err.path.join('.')}: ${err.message}`));
       } else {
         errors.push('Validation failed');
       }

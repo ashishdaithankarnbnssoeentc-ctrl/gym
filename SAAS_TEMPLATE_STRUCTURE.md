@@ -1,15 +1,19 @@
-# 🧱 **SaaS Template Repository Structure**
+# 🧱 **Elite Fitness SaaS Repository Structure**
 
 ## 📁 **Complete Repo Structure**
 
 ```
-saas-template/
+elite-fitness-saas/
 ├── 📄 README.md
 ├── 📄 LICENSE
 ├── 📄 .env.example
 ├── 📄 .gitignore
 ├── 📄 render.yaml
 ├── 📄 vercel.json
+├── 📄 package.json
+├── 📄 tsconfig.json
+├── 📄 vite.config.ts
+├── 📄 postcss.config.mjs
 │
 ├── 📂 frontend/
 │   ├── 📄 package.json
@@ -41,31 +45,41 @@ saas-template/
 │       │   └── 📄 config.js
 │       ├── 📄 App.jsx
 │       └── 📄 main.jsx
-│
+
 ├── 📂 backend/
 │   ├── 📄 package.json
 │   ├── 📄 tsconfig.json
 │   ├── 📄 .env.example
 │   └── 📂 src/
 │       ├── 📂 routes/
+│       │   ├── 📄 auth.routes.ts
+│       │   ├── 📄 content.routes.ts
+│       │   ├── 📄 favorites.routes.ts
+│       │   ├── 📄 membership.routes.ts
 │       │   ├── 📄 admin.routes.ts
 │       │   ├── 📄 admin.notifications.routes.ts
 │       │   ├── 📄 admin.analytics.routes.ts
 │       │   ├── 📄 admin.actions.routes.ts
 │       │   ├── 📄 retention.analytics.routes.ts
-│       │   ├── 📄 optimized.analytics.routes.ts
 │       │   └── 📄 user.notifications.routes.ts
 │       ├── 📂 middleware/
-│       │   ├── 📄 auth.middleware.ts
-│       │   ├── 📄 admin.middleware.ts
-│       │   ├── 📄 global.membership.middleware.ts
-│       │   └── 📄 membership.middleware.ts
+│       │   ├── 📄 auth.enhanced.ts
+│       │   ├── 📄 auth.cookies.ts
+│       │   ├── 📄 csrf.cookies.ts
+│       │   ├── 📄 ownership.enforcement.ts
+│       │   ├── 📄 mass.assignment.prevention.ts
+│       │   ├── 📄 input.validation.ts
+│       │   ├── 📄 security.comprehensive.ts
+│       │   ├── 📄 security.hardening.ts
+│       │   └── 📄 security.production.ts
 │       ├── 📂 services/
-│       │   ├── 📄 membership.service.ts
+│       │   ├── 📄 membership.service.ts (ATOMIC VERSION)
+│       │   ├── 📄 membership.service.vulnerable.ts
 │       │   ├── 📄 internal.notification.service.ts
 │       │   ├── 📄 membership.cache.service.ts
 │       │   └── 📄 notification.service.ts
 │       ├── 📂 jobs/
+│       │   ├── 📄 membership.cron.ts
 │       │   ├── 📄 internal.cron.ts
 │       │   └── 📄 production.cron.ts
 │       ├── 📂 lib/
@@ -73,37 +87,42 @@ saas-template/
 │       │   ├── 📄 sentry.ts
 │       │   └── 📄 cache.ts
 │       ├── 📂 controllers/
-│       │   ├── 📄 membership.controller.ts
-│       │   ├── 📄 content.controller.ts
-│       │   └── 📄 auth.controller.ts
-│       └── 📄 app.ts
+│       │   ├── 📄 auth.controller.ts (SECURE VERSION)
+│       │   ├── 📄 auth.controller.secure.ts
+│       │   ├── 📄 content.controller.ts (SECURE VERSION)
+│       │   ├── � content.controller.secure.ts
+│       │   ├── � favorites.controller.ts (SECURE VERSION)
+│       │   ├── 📄 favorites.controller.secure.ts
+│       │   ├── 📄 membership.controller.ts (SECURE VERSION)
+│       │   └── 📄 membership.controller.secure.ts
+│       └── 📄 index.ts
 │   └── 📂 database/
-│       ├── 📂 schema/
-│       │   ├── 📄 memberships.sql
-│       │   ├── 📄 notifications.sql
-│       │   ├── 📄 audit_logs.sql
-│       │   └── 📄 retention_risk.sql
-│       ├── 📂 migrations/
-│       │   ├── 📄 001_initial_schema.sql
-│       │   ├── 📄 002_notifications.sql
-│       │   ├── 📄 003_audit_logs.sql
-│       │   └── 📄 004_retention_analytics.sql
+│       ├── � schema/
+│       │   └── 📄 atomic-membership.sql
+│       ├── � migrations/
+│       │   └── 📄 001_extend_membership_atomic.sql
 │       └── 📂 seeds/
-│           ├── 📄 sample_data.sql
-│           └── 📄 admin_user.sql
-│
-├── 📂 docs/
+│           └── 📄 sample-membership-data.sql
+
+├── � docs/
+│   ├── � SECURITY_AUDIT_REPORT.md
 │   ├── 📄 ARCHITECTURE.md
 │   ├── 📄 SETUP.md
 │   ├── 📄 API.md
 │   ├── 📄 DEPLOYMENT.md
 │   ├── 📄 SCALING.md
 │   └── 📄 FEATURES.md
-│
-└── 📂 scripts/
-    ├── 📄 setup.sh
-    ├── 📄 deploy.sh
-    └── 📄 seed-db.sh
+
+├── 📂 scripts/
+│   └── 📄 setup.sh
+
+├── 📂 .github/
+│   └── 📂 workflows/
+│       ├── 📄 deploy.yml
+│       └── 📄 security-test.yml
+
+└── 📂 LICENSE/
+    └── 📄 LICENSE
 ```
 
 ---

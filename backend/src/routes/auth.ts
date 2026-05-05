@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { syncUser, getMe, updateProfile } from '../controllers/auth.controller.js';
+import { syncUser, getProfile, updateProfile } from '../controllers/auth.controller.js';
 
 const router = Router();
 
@@ -20,7 +20,7 @@ router.post('/sync-user', requireAuth, syncUser);
  * GET /api/auth/me
  * Get current user profile
  */
-router.get('/me', requireAuth, getMe);
+router.get('/me', requireAuth, getProfile);
 
 /**
  * PATCH /api/auth/me

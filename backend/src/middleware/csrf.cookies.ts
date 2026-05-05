@@ -41,7 +41,7 @@ class CSRFProtection {
   /**
    * Validate CSRF token
    */
-  private validateToken(req: Request, providedToken: string): boolean {
+  private validateTokenInternal(req: Request, providedToken: string): boolean {
     const sessionToken = req.cookies?.csrfToken;
     return sessionToken && sessionToken === providedToken;
   }
@@ -104,7 +104,7 @@ class CSRFProtection {
       }
 
       // Validate token against session
-      if (!this.validateToken(req, providedToken)) {
+      if (!this.validateTokenInternal(req, providedToken)) {
         console.error(`[CSRF] Invalid CSRF token from ${req.ip} - ${req.method} ${req.path}`);
         return res.status(403).json({
           error: 'Invalid CSRF token',
@@ -134,7 +134,7 @@ class CSRFProtection {
    * Get current CSRF token for templates
    */
   getToken(req: Request): string {
-    return req.cookies?.csrfToken || res.locals?.csrfToken || '';
+    return req.cookies?.csrfToken || '';
   }
 }
 
