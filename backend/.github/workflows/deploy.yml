@@ -120,7 +120,7 @@ jobs:
           
           # Check if service is responding
           for i in {1..10}; do
-            if curl -f https://elite-fitness-backend.onrender.com/; then
+            if curl -f https://gym-backend.onrender.com/; then
               echo "Health check passed"
               exit 0
             fi
@@ -134,16 +134,16 @@ jobs:
       - name: Post-deployment smoke tests
         run: |
           # Test critical endpoints
-          curl -f https://elite-fitness-backend.onrender.com/ || exit 1
-          curl -f https://elite-fitness-backend.onrender.com/api/content || exit 1
-          curl -f https://elite-fitness-backend.onrender.com/api/media/stats || exit 1
+          curl -f https://gym-backend.onrender.com/ || exit 1
+          curl -f https://gym-backend.onrender.com/api/content || exit 1
+          curl -f https://gym-backend.onrender.com/api/media/stats || exit 1
 
       - name: Notify deployment success
         if: success()
         run: |
           echo "✅ Deployment successful!"
-          echo "Backend: https://elite-fitness-backend.onrender.com"
-          echo "Frontend: https://elite-fitness.vercel.app"
+          echo "Backend: https://gym-backend.onrender.com"
+          echo "Frontend: https://gym-frontend.vercel.app"
 
       - name: Notify deployment failure
         if: failure()
@@ -175,7 +175,7 @@ jobs:
           sleep 60
           
           for i in {1..5}; do
-            if curl -f https://elite-fitness-backend.onrender.com/; then
+            if curl -f https://gym-backend.onrender.com/; then
               echo "✅ Rollback successful"
               exit 0
             fi
@@ -214,12 +214,20 @@ jobs:
     needs: deploy
     if: success() && github.ref == 'refs/heads/main'
     steps:
+      - name: Get deployment URL from environment
+        id: get_deployment_url
+        run: |
+          echo "DEPLOYMENT_URL=https://gym-backend.onrender.com" >> $GITHUB_ENV
+          echo "::set-output name=url::https://gym-backend.onrender.com"
+          
       - name: Monitor performance after deployment
+        env:
+          DEPLOYMENT_URL: ${{ steps.get_deployment_url.outputs.url || 'https://gym-backend.onrender.com' }}
         run: |
           echo "📊 Monitoring performance for 10 minutes..."
           
           for i in {1..20}; do
-            response_time=$(curl -o /dev/null -s -w '%{time_total}' https://elite-fitness-backend.onrender.com/)
+            response_time=$(curl -o /dev/null -s -w '%{time_total}' $DEPLOYMENT_URL/)
             echo "$(date): ${response_time}s"
             
             # Alert if response time > 2 seconds
