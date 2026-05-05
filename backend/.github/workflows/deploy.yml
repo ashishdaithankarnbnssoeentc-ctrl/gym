@@ -208,32 +208,4 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # Performance monitoring
-  performance-monitor:
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: success() && github.ref == 'refs/heads/main'
-    steps:
-      - name: Get deployment URL from environment
-        id: get_deployment_url
-        run: |
-          echo "DEPLOYMENT_URL=https://gym-backend.onrender.com" >> $GITHUB_ENV
-          echo "::set-output name=url::https://gym-backend.onrender.com"
-          
-      - name: Monitor performance after deployment
-        env:
-          DEPLOYMENT_URL: ${{ steps.get_deployment_url.outputs.url || 'https://gym-backend.onrender.com' }}
-        run: |
-          echo "📊 Monitoring performance for 10 minutes..."
-          
-          for i in {1..20}; do
-            response_time=$(curl -o /dev/null -s -w '%{time_total}' $DEPLOYMENT_URL/)
-            echo "$(date): ${response_time}s"
-            
-            # Alert if response time > 2 seconds
-            if (( $(echo "$response_time > 2" | bc -l) )); then
-              echo "⚠️ Slow response detected: ${response_time}s"
-            fi
-            
-            sleep 30
-          done
+  

@@ -12,12 +12,14 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
-import { initSentry, requestTrackingMiddleware, errorHandlerMiddleware } from './sentry.js';
+import { initSentry, requestTrackingMiddleware, errorHandlerMiddleware, comprehensiveSecurity } from './sentry.js';
 import { requireAuth } from './middleware/auth.js';
 import { requireActiveMembership } from './middleware/global.membership.middleware.js';
 import { envValidator } from './config/env.validation.js';
 import { performanceMonitor } from './middleware/performance.monitoring.js';
 import { scalingMiddleware } from './middleware/scaling.middleware.js';
+import { createRateLimit } from './middleware/security.hardening.js';
+import { comprehensiveSecurity } from './middleware/security.comprehensive.js';
 import authRoutes from './routes/auth.js';
 import membershipRoutes from './routes/membership-basic.routes.js';
 import favoritesRoutes from './routes/favorites.js';
@@ -134,9 +136,6 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// Apply performance monitoring middleware
-app.use(performanceMonitor.trackRequest());
 
 // Apply rate limiting to API routes
 app.use('/api/', apiLimiter);
