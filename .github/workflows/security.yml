@@ -18,7 +18,7 @@ jobs:
           node-version: 20
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Run security CI
         run: node scripts/security.enforcement.ci.js
