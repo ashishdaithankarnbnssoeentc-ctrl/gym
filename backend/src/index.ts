@@ -21,6 +21,8 @@ import { scalingMiddleware } from './middleware/scaling.middleware.js';
 import { productionSecurity } from './middleware/security.production.js';
 import { csrfProtection } from './middleware/csrf.cookies.js';
 import { secureAuthCookies } from './middleware/auth.cookies.js';
+import { ownershipEnforcement } from './middleware/ownership.enforcement.js';
+import { massAssignmentPrevention } from './middleware/mass.assignment.prevention.js';
 import authRoutes from './routes/auth.js';
 import membershipRoutes from './routes/membership-basic.routes.js';
 import favoritesRoutes from './routes/favorites.js';
@@ -171,6 +173,14 @@ app.use(csrfProtection.setToken());
 
 // Apply secure cookie authentication
 app.use('/api/auth', secureAuthCookies.authenticateAndSetCookie());
+
+// Apply ownership enforcement to protected routes
+app.use('/api/favorites', ownershipEnforcement.enforceOwnershipMiddleware('favorites'));
+app.use('/api/content', ownershipEnforcement.enforceOwnershipMiddleware('content'));
+app.use('/api/proposals', ownershipEnforcement.enforceOwnershipMiddleware('proposals'));
+
+// Apply mass assignment prevention to all routes
+app.use('/api', massAssignmentPrevention.preventGenericMassAssignment());
 
 // API Routes
 app.use('/api', authRoutes);

@@ -27,7 +27,7 @@ class SecureAuthCookies {
 
   constructor() {
     this.jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
-    
+
     this.config = {
       secret: this.jwtSecret,
       expiresIn: '15m', // Shorter for security
@@ -78,29 +78,36 @@ class SecureAuthCookies {
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          // Check for existing cookie first
-          const existingToken = req.cookies?.authToken;
-          
-          if (existingToken) {
-            // Verify existing token
-            const decoded = await verifyFirebaseToken(existingToken);
-            
-            if (decoded) {
-              req.user = {
-                id: decoded.uid,
-                email: decoded.email || '',
-                tenantId: decoded.tenantId || 'default',
-                uid: decoded.uid,
-                name: decoded.name,
-                picture: decoded.picture,
-                role: decoded.role || 'user',
-                ...decoded
-              };
-              
-              return next();
+          // In production, only use cookies (disable Bearer tokens)
+          if (process.env.NODE_ENV === 'production') {
+            const existingToken = req.cookies?.authToken;
+
+            if (existingToken) {
+              // Verify existing token
+              const decoded = await verifyFirebaseToken(existingToken);
+
+              if (decoded) {
+                req.user = {
+                  id: decoded.uid,
+                  email: decoded.email || '',
+                  tenantId: decoded.tenantId || 'default',
+                  uid: decoded.uid,
+                  name: decoded.name,
+                  picture: decoded.picture,
+                  role: decoded.role || 'user',
+                  ...decoded
+                };
+
+                return next();
+              }
             }
+
+            return res.status(401).json({
+              error: 'Authentication required',
+              message: 'Please provide valid authentication'
+            });
           }
-          
+
           return res.status(401).json({
             error: 'Authentication required',
             message: 'Please provide valid authentication'
@@ -108,7 +115,7 @@ class SecureAuthCookies {
         }
 
         const firebaseToken = authHeader.replace('Bearer ', '');
-        
+
         // Verify with Firebase Admin SDK
         const decoded = await verifyFirebaseToken(firebaseToken);
 
@@ -160,10 +167,10 @@ class SecureAuthCookies {
         next();
       } catch (err: any) {
         console.error('[AUTH COOKIES]', err.message);
-        
+
         // Clear any existing auth on error
         this.clearAuthCookie(res);
-        
+
         return res.status(401).json({
           error: 'Authentication failed',
           message: 'Invalid authentication credentials'
@@ -192,7 +199,7 @@ class SecureAuthCookies {
 
         if (!decoded) {
           this.clearAuthCookie(res);
-          
+
           return res.status(401).json({
             error: 'Invalid token',
             message: 'Authentication token has expired or is invalid'
@@ -213,9 +220,9 @@ class SecureAuthCookies {
         next();
       } catch (err: any) {
         console.error('[AUTH COOKIES]', err.message);
-        
+
         this.clearAuthCookie(res);
-        
+
         return res.status(401).json({
           error: 'Authentication failed',
           message: 'Invalid authentication token'
@@ -230,10 +237,10 @@ class SecureAuthCookies {
   logout() {
     return (req: Request, res: Response, next: NextFunction) => {
       this.clearAuthCookie(res);
-      
+
       // Clear any frontend localStorage indicator
       res.locals.clearLocalStorage = true;
-      
+
       return res.status(200).json({
         message: 'Logged out successfully'
       });
@@ -245,7 +252,7 @@ class SecureAuthCookies {
    */
   getCurrentUser(req: Request): any {
     const token = req.cookies?.authToken;
-    
+
     if (!token) {
       return null;
     }

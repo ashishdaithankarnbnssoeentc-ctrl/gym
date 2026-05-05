@@ -51,12 +51,12 @@ class CSRFProtection {
    */
   private setCSRFCookie(res: Response): string {
     const token = this.generateToken();
-    
+
     res.cookie('csrfToken', token, {
       ...this.config.cookieOptions,
       path: '/'
     });
-    
+
     return token;
   }
 
@@ -72,10 +72,10 @@ class CSRFProtection {
 
       // Set CSRF token for forms/API calls
       const token = this.setCSRFCookie(res);
-      
+
       // Make token available to templates
       res.locals.csrfToken = token;
-      
+
       next();
     };
   }
@@ -90,11 +90,9 @@ class CSRFProtection {
         return next();
       }
 
-      // Get token from various sources
-      const tokenFromBody = req.body?.csrfToken;
+      // Get token from header only (security best practice)
       const tokenFromHeader = req.get('X-CSRF-Token');
-      const tokenFromQuery = req.query?.csrfToken;
-      const providedToken = tokenFromBody || tokenFromHeader || tokenFromQuery;
+      const providedToken = tokenFromHeader;
 
       if (!providedToken) {
         console.warn(`[CSRF] Missing CSRF token from ${req.ip} - ${req.method} ${req.path}`);
@@ -117,7 +115,7 @@ class CSRFProtection {
 
       // Clear token after successful validation
       res.clearCookie('csrfToken');
-      
+
       next();
     };
   }
