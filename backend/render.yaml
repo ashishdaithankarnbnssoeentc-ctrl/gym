@@ -43,9 +43,7 @@ services:
       minInstances: 1
       maxInstances: 3
       
-    # Build context
-    buildContext:
-      rootDir: .
+    # Build context - running from backend directory
       
     # Dependencies
     dependencies:
