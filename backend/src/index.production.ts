@@ -5,6 +5,8 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import { tenantMiddleware } from './middleware/tenant';
+import './types';
 
 // Load environment variables
 dotenv.config();
@@ -74,7 +76,7 @@ app.use(cors({
 // ✅ HEALTH ENDPOINTS (PUBLIC - MUST BE FIRST ROUTES)
 app.get('/', (req: Request, res: Response) => {
   const timestamp = new Date().toISOString();
-  
+
   res.json({
     status: 'ok',
     message: 'Elite Fitness Backend API',
@@ -104,23 +106,32 @@ app.get('/api/health', (req: Request, res: Response) => {
 const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   // Simple token check for now - replace with real auth later
   const token = req.headers.authorization?.replace('Bearer ', '');
-  
+
   if (!token) {
     return res.status(401).json({
       error: 'Unauthorized',
       message: 'Authentication required'
     });
   }
-  
+
   // TODO: Add real JWT verification here
+  // Mock user for testing - replace with real Firebase auth
+  (req as any).user = {
+    uid: 'test-user-123',
+    tenantId: 'test-tenant-456',
+    email: 'test@example.com',
+    role: 'user'
+  };
+
   next();
 };
 
 // ✅ PROTECTED API ROUTES
-app.get('/api/protected', requireAuth, (req: Request, res: Response) => {
+app.get('/api/protected', requireAuth, tenantMiddleware(), (req: Request, res: Response) => {
   res.json({
     message: 'Protected content',
     user: 'authenticated_user',
+    tenant: req.tenant,
     timestamp: new Date().toISOString()
   });
 });
