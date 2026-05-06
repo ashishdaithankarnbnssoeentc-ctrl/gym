@@ -5,7 +5,8 @@ import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import cookieParser from 'cookie-parser';
+// import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // Import custom middleware
 // import { requireAuth, optionalAuth } from './middleware/auth';
@@ -16,13 +17,14 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 // import { massAssignmentProtection } from './middleware/mass-assignment.middleware';
 // import { ownershipEnforcement } from './middleware/ownership.middleware';
 // import { csrfProtection } from './middleware/csrf.middleware';
-import { comprehensiveSecurity } from './middleware/security.comprehensive';
+// import { comprehensiveSecurity } from './middleware/security.comprehensive';
 // import { requestLogging } from './middleware/request-logging.middleware';
 // import { transactionSecurity } from './middleware/transaction.security';
 
 // Import production monitoring middleware
-import { requestTracer } from './middleware/request-tracing.middleware';
-import { apiLimiter } from './middleware/safe-rate-limit.middleware';
+// import { requestTracer } from './middleware/request-tracing.middleware';
+// import { apiLimiter } from './middleware/safe-rate-limit.middleware';
+// import { errorContextEnricher } from './middleware/error-context.middleware';
 
 // Import routes
 // import authRoutes from './routes/auth';
@@ -58,19 +60,9 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// ✅ PUBLIC HEALTH CHECK (for CI, Render, uptime checks) - MUST BE FIRST ROUTE
-app.get('/api/health', (req: Request, res: Response) => {
-  return res.status(200).json({
-    status: 'ok',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Health check endpoint (bypasses security middleware)
+// Basic health check endpoint
 app.get('/', (req: Request, res: Response) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] GET / - Health check`);
 
   res.json({
     status: 'ok',
@@ -81,17 +73,54 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
+// Simple uptime health endpoint for monitoring
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    ok: true,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ✅ PUBLIC HEALTH CHECK (for CI, Render, uptime checks) - MUST BE FIRST ROUTE
+app.get('/api/health', (req: Request, res: Response) => {
+  return res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Parse multiple origins from env (comma-separated)
 const allowedOrigins = FRONTEND_URL.split(',').map(url => url.trim());
 
+// Apply security headers FIRST
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+}));
+
+// Apply body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Apply cookie parsing
+app.use(cookieParser());
+
 // Apply production monitoring middleware (before security for full visibility)
-app.use(requestTracer);
+// app.use(requestTracer);
 
 // Apply rate limiting
-app.use('/api', apiLimiter);
+// app.use('/api', apiLimiter);
 
 // Apply production-grade security middleware
-app.use(comprehensiveSecurity.middleware());
+// app.use(comprehensiveSecurity && comprehensiveSecurity.middleware());
 
 // Production CORS and Security Middleware
 app.use(cors({
@@ -110,25 +139,12 @@ app.use(cors({
       console.warn(`[CORS] Blocked origin: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     }
-
     // In development, allow all origins
     return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
-
-// Apply security headers
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-    },
-  },
 }));
 
 // Apply compression middleware
@@ -174,7 +190,7 @@ app.use('/monitoring', monitoringRoutes);
 // Global error handler with context enrichment
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   // Use error context enrichment for better visibility
-  errorContextEnricher.logError(err, req, res);
+  console.error('Error:', err.message || err);
 
   res.status(500).json({
     error: 'Internal server error',

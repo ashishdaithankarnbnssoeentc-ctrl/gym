@@ -1,7 +1,7 @@
 interface QueryTrace {
   timestamp: string;
   table: string;
-  operation: 'select' | 'insert' | 'update' | 'delete';
+  operation: 'select' | 'insert' | 'update' | 'delete' | 'upsert';
   duration: number;
   rowsAffected?: number;
   query?: string;
@@ -44,34 +44,36 @@ class QueryTracker {
     supabaseClient.from = (table: string) => {
       const startTime = Date.now();
       const queryBuilder = originalFrom(table);
-      
+
       // Wrap the query execution methods
       const wrapMethod = (method: string, originalMethod: Function) => {
         return (...args: any[]) => {
           const methodStartTime = Date.now();
-          
+
           return originalMethod.apply(queryBuilder, args).then((result: any) => {
             const duration = Date.now() - methodStartTime;
-            
+
             this.trackQuery({
+              timestamp: new Date().toISOString(),
               table,
               operation: this.detectOperation(method, args),
               duration,
               rowsAffected: this.extractRowCount(result, method),
               query: this.extractQuery(table, method, args)
             });
-            
+
             return result;
           }).catch((error: any) => {
             const duration = Date.now() - methodStartTime;
-            
+
             this.trackQuery({
+              timestamp: new Date().toISOString(),
               table,
               operation: this.detectOperation(method, args),
               duration,
               query: this.extractQuery(table, method, args)
             });
-            
+
             throw error;
           });
         };
@@ -92,29 +94,31 @@ class QueryTracker {
     if (originalRpc && supabaseClient.rpc) {
       supabaseClient.rpc = (fnName: string, params?: any) => {
         const startTime = Date.now();
-        
+
         return originalRpc(fnName, params).then((result: any) => {
           const duration = Date.now() - startTime;
-          
+
           this.trackQuery({
+            timestamp: new Date().toISOString(),
             table: `rpc:${fnName}`,
             operation: 'select',
             duration,
             rowsAffected: this.extractRowCount(result, 'select'),
             query: `rpc.${fnName}(${JSON.stringify(params)})`
           });
-          
+
           return result;
         }).catch((error: any) => {
           const duration = Date.now() - startTime;
-          
+
           this.trackQuery({
+            timestamp: new Date().toISOString(),
             table: `rpc:${fnName}`,
             operation: 'select',
             duration,
             query: `rpc.${fnName}(${JSON.stringify(params)})`
           });
-          
+
           throw error;
         });
       };
@@ -126,7 +130,7 @@ class QueryTracker {
   private trackQuery(query: QueryTrace) {
     // Add user context if available (would be set by middleware)
     const currentContext = this.getCurrentContext();
-    
+
     this.traces.push({
       ...query,
       ...currentContext,
@@ -150,21 +154,21 @@ class QueryTracker {
       case 'insert': return 'insert';
       case 'update': return 'update';
       case 'delete': return 'delete';
-      case 'upsert': return 'upsert';
+      case 'upsert': return 'update';
       default: return 'select';
     }
   }
 
   private extractRowCount(result: any, operation: string): number | undefined {
     if (!result) return 0;
-    
+
     if (operation === 'select') {
       return Array.isArray(result) ? result.length : 1;
     }
-    
+
     if (result.count !== undefined) return result.count;
     if (result.error) return 0;
-    
+
     return 1;
   }
 
@@ -186,7 +190,7 @@ class QueryTracker {
 
   getHeatmap(): DatabaseHeatmap {
     const tableStats = new Map<string, any>();
-    
+
     this.traces.forEach(trace => {
       if (!tableStats.has(trace.table)) {
         tableStats.set(trace.table, {
@@ -197,7 +201,7 @@ class QueryTracker {
           operations: { select: 0, insert: 0, update: 0, delete: 0 }
         });
       }
-      
+
       const stats = tableStats.get(trace.table);
       stats.count++;
       stats.totalTime += trace.duration;
@@ -253,7 +257,7 @@ class QueryTracker {
       if (stats.slowQueries > stats.count * 0.3) { // 30% slow queries
         suggestions.push(`Consider adding indexes on table: ${table}`);
       }
-      
+
       if (stats.avgTime > 150) {
         suggestions.push(`Table ${table} has high average query time (${stats.avgTime}ms)`);
       }
@@ -265,7 +269,7 @@ class QueryTracker {
     }
 
     // Check for N+1 patterns
-    const potentialN1Queries = heatmap.repeatedQueries.filter(q => 
+    const potentialN1Queries = heatmap.repeatedQueries.filter(q =>
       q.query.includes('select') && q.count > 10
     );
     if (potentialN1Queries.length > 0) {

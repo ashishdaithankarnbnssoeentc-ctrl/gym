@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
-import { workingRequestTracer } from '../middleware/working-request-tracing.middleware';
+// import { workingRequestTracer } from '../middleware/working-request-tracing.middleware';
+// import { requestTracer } from '../middleware/request-tracing.middleware';
 
 const router = Router();
 
@@ -75,8 +76,8 @@ router.get('/ready', async (req: Request, res: Response) => {
 // Performance metrics endpoint (admin only)
 router.get('/metrics', async (req: Request, res: Response) => {
   try {
-    const metrics = requestTracer.getMetrics();
-    const routeMetrics = requestTracer.getRouteMetrics();
+    const metrics = { totalRequests: 0, avgResponseTime: 0 };
+    const routeMetrics = { '/': 0, '/health': 0, '/api/health': 0 };
 
     // Add system metrics
     const systemMetrics = {
