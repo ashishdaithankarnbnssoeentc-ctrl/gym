@@ -42,8 +42,8 @@
   "devDependencies": {
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.3",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/http-proxy-middleware": "^0.19.3",
     "@types/morgan": "^1.9.10",
     "@types/node": "^22.15.8",
