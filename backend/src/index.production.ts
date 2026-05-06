@@ -128,11 +128,17 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
       });
     }
 
-    // Initialize Supabase client
+    // Initialize RLS-bound Supabase client for user requests
     const supabase = createClient(
       process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_ANON_KEY!
     );
+
+    // Set authenticated context for RLS policies
+    supabase.auth.setSession({
+      access_token: token,
+      refresh_token: ''
+    });
 
     // Look up real user in database
     const { data: user, error } = await supabase
@@ -145,6 +151,20 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'User not found'
+      });
+    }
+
+    // Validate tenant exists
+    const { data: tenant, error: tenantError } = await supabase
+      .from('tenants')
+      .select('id, status')
+      .eq('id', user.tenant_id)
+      .single();
+
+    if (tenantError || !tenant) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Invalid tenant'
       });
     }
 
