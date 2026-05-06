@@ -21,6 +21,11 @@
     "@sentry/node": "^10.51.0",
     "@sentry/tracing": "^7.120.4",
     "@supabase/supabase-js": "^2.104.0",
+    "@types/compression": "^1.8.1",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.17",
     "@types/pdfkit": "^0.17.6",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
@@ -39,13 +44,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/compression": "^1.8.1",
-    "@types/cookie-parser": "^1.4.10",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
     "@types/http-proxy-middleware": "^0.19.3",
     "@types/morgan": "^1.9.10",
-    "@types/node": "^22.19.17",
     "nodemon": "^3.1.10",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
