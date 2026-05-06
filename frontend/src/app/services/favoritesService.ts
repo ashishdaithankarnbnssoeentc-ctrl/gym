@@ -6,7 +6,7 @@
 
 import { auth } from '../lib/firebase';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export interface Favorite {
   id: string;
@@ -20,7 +20,7 @@ export interface Favorite {
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
   const user = auth.currentUser;
-  
+
   if (!user) {
     throw new Error('User not authenticated');
   }
@@ -76,12 +76,12 @@ export async function addFavorite(contentId: string, contentType: string = 'vide
 
     if (!response.ok) {
       const error = await response.json();
-      
+
       // Handle duplicate gracefully
       if (response.status === 409) {
         throw new Error('Already in favorites');
       }
-      
+
       throw new Error(error.message || 'Failed to add favorite');
     }
 

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getAuthToken } from '../lib/authUtils';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 interface FetchOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
