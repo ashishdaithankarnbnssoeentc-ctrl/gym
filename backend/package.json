@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Production backend for Elite Fitness Platform",
   "main": "dist/index.production.js",
-  "type": "module",
   "scripts": {
     "dev": "nodemon --exec tsx src/index.ts",
     "build": "tsc",
@@ -29,7 +28,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^8.5.0",
-    "firebase-admin": "^13.8.0",
+    "firebase-admin": "^10.3.0",
     "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
     "node-cron": "^4.2.1",
