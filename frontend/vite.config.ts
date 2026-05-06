@@ -20,6 +20,9 @@ export default defineConfig({
   build: {
     outDir: '../dist'
   },
+  define: {
+    'VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'https://your-production-backend-url.com')
+  }
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
