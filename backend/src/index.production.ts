@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { tenantMiddleware } from './middleware/tenant';
+import { verifyFirebaseToken } from './firebase';
+import { createClient } from '@supabase/supabase-js';
 import './types';
 
 // Load environment variables
@@ -102,28 +104,68 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
-// ✅ SIMPLE AUTH MIDDLEWARE FOR PROTECTED ROUTES
-const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  // Simple token check for now - replace with real auth later
-  const token = req.headers.authorization?.replace('Bearer ', '');
+// ✅ REAL AUTH MIDDLEWARE FOR PROTECTED ROUTES
+const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Extract Bearer token
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace('Bearer ', '');
 
-  if (!token) {
+    if (!token) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required'
+      });
+    }
+
+    // Verify Firebase token
+    const decodedToken = await verifyFirebaseToken(token);
+
+    if (!decodedToken || !decodedToken.uid) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid authentication token'
+      });
+    }
+
+    // Initialize Supabase client
+    const supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    // Look up real user in database
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, tenant_id, role, created_at')
+      .eq('firebase_uid', decodedToken.uid)
+      .single();
+
+    if (error || !user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not found'
+      });
+    }
+
+    // Attach real user data to request
+    (req as any).user = {
+      uid: decodedToken.uid,
+      id: user.id,
+      email: user.email,
+      tenantId: user.tenant_id,
+      role: user.role || 'user',
+      firebaseEmail: decodedToken.email
+    };
+
+    next();
+  } catch (error: any) {
+    console.error('Auth middleware error:', error.message);
     return res.status(401).json({
       error: 'Unauthorized',
-      message: 'Authentication required'
+      message: 'Authentication failed'
     });
   }
-
-  // TODO: Add real JWT verification here
-  // Mock user for testing - replace with real Firebase auth
-  (req as any).user = {
-    uid: 'test-user-123',
-    tenantId: 'test-tenant-456',
-    email: 'test@example.com',
-    role: 'user'
-  };
-
-  next();
 };
 
 // ✅ PROTECTED API ROUTES
