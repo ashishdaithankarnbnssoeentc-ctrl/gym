@@ -17,7 +17,7 @@
     "allowSyntheticDefaultImports": true
   },
   "include": [
-    "src/**/*"
+    "src/index.production.ts"
   ],
   "exclude": [
     "node_modules",
