@@ -1,0 +1,25 @@
+# Ignore directories that should not be deployed
+backend/
+gym/
+scripts/
+docs/
+LICENSE/
+
+# Ignore files that are not needed for frontend deployment
+*.md
+*.sh
+*.ps1
+*.cjs
+*.sql
+.env.example
+postcss.config.mjs
+render.yaml
+tsconfig.json
+
+# Ignore development and configuration files
+.git/
+.github/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
