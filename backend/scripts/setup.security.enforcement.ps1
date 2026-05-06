@@ -3,7 +3,7 @@
 
 # Set environment variables
 $env:SUPABASE_URL = "https://ozmmontfdlnzvqchhzdd.supabase.co"
-$env:SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96bW1vbnRmZGxuenZxY2hoemRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTc0ODE0MCwiZXhwIjoyMDkxMzI0MTQwfQ.zcpHzf-BRSuBpDMLa8s9oM4lhwIzigUIdbgikq9Z6TY"
+$env:SUPABASE_SERVICE_ROLE_KEY = ""
 
 Write-Host "🔒 Setting up security enforcement..." -ForegroundColor Green
 

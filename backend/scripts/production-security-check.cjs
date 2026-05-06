@@ -11,13 +11,13 @@ const { createClient } = require('@supabase/supabase-js');
 
 // Use environment variables that should be set
 const supabaseUrl = process.env.SUPABASE_URL || "https://ozmmontfdlnzvqchhzdd.supabase.co";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96bW1vbnRmZGxuenZxY2hoemRkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcxNDU2MjQwMCwiZXhwIjoyMDMwMTM4NDAwfQ.5kF8L5xJn9J2J8Q3H9N9P2H5L6X9K8M7N4O1P3Q2R1S";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function runProductionSecurityChecks() {
   console.log('🔍 Running production security checks...\n');
-  
+
   const results = {
     passed: 0,
     failed: 0,
@@ -34,7 +34,7 @@ async function runProductionSecurityChecks() {
         .select('count(*)')
         .eq('table_schema', 'public')
         .single();
-      
+
       if (testError) throw testError;
       console.log('✅ Database connection successful');
       results.passed++;
@@ -53,7 +53,7 @@ async function runProductionSecurityChecks() {
         .eq('table_schema', 'public')
         .eq('table_name', 'audit_logs')
         .single();
-      
+
       if (auditError || !auditTable) {
         console.warn('⚠️  Audit logs table not found');
         results.warnings++;
@@ -74,7 +74,7 @@ async function runProductionSecurityChecks() {
       'current_tenant_id',
       'set_tenant_context'
     ];
-    
+
     let functionsOk = true;
     for (const funcName of requiredFunctions) {
       try {
@@ -84,7 +84,7 @@ async function runProductionSecurityChecks() {
           .eq('routine_schema', 'public')
           .eq('routine_name', funcName)
           .single();
-        
+
         if (funcError || !func) {
           console.error(`❌ Function ${funcName} not found`);
           functionsOk = false;
@@ -94,7 +94,7 @@ async function runProductionSecurityChecks() {
         functionsOk = false;
       }
     }
-    
+
     if (functionsOk) {
       console.log('✅ Required security functions exist');
       results.passed++;
@@ -111,7 +111,7 @@ async function runProductionSecurityChecks() {
         .select('tablename, policyname, roles')
         .eq('schemaname', 'public')
         .like('roles', '%public%');
-      
+
       if (policyError) {
         console.warn('⚠️  Could not check public policies:', policyError.message);
         results.warnings++;
@@ -135,7 +135,7 @@ async function runProductionSecurityChecks() {
     console.log('\n🏢 Check 5: Tenant isolation');
     const tenantTables = ['users', 'content', 'memberships'];
     let tenantIsolationOk = true;
-    
+
     for (const tableName of tenantTables) {
       try {
         const { data: columns, error: colError } = await supabase
@@ -144,7 +144,7 @@ async function runProductionSecurityChecks() {
           .eq('table_schema', 'public')
           .eq('table_name', tableName)
           .eq('column_name', 'tenant_id');
-        
+
         if (colError) {
           console.warn(`⚠️  Could not check ${tableName} tenant column`);
           tenantIsolationOk = false;
@@ -159,7 +159,7 @@ async function runProductionSecurityChecks() {
         tenantIsolationOk = false;
       }
     }
-    
+
     if (tenantIsolationOk) {
       console.log('✅ Tenant isolation verified');
       results.passed++;
@@ -175,16 +175,16 @@ async function runProductionSecurityChecks() {
     console.log(`✅ Passed: ${results.passed}`);
     console.log(`❌ Failed: ${results.failed}`);
     console.log(`⚠️  Warnings: ${results.warnings}`);
-    
+
     if (results.details.length > 0) {
       console.log('\n📋 Details:');
       results.details.forEach(detail => {
         console.log(`   - ${detail}`);
       });
     }
-    
+
     console.log('\n' + '='.repeat(50));
-    
+
     if (results.failed > 0) {
       console.log('🚨 SECURITY CHECK FAILED - Immediate action required');
       process.exit(1);
@@ -195,7 +195,7 @@ async function runProductionSecurityChecks() {
       console.log('✅ SECURITY CHECK PASSED - All systems secure');
       process.exit(0);
     }
-    
+
   } catch (error) {
     console.error('❌ Security check failed with error:', error.message);
     process.exit(1);
