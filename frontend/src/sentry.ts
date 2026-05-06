@@ -53,12 +53,12 @@ export function captureException(error: Error, context?: any) {
 }
 
 // Capture custom messages
-export function captureMessage(message: string, level: Sentry.SeverityLevel = "info") {
+export function captureMessage(message: string, level: "fatal" | "error" | "warning" | "info" | "debug" = "info") {
   Sentry.captureMessage(message, level);
 }
 
 // Add breadcrumbs for user actions
-export function addBreadcrumb(category: string, message: string, level: Sentry.SeverityLevel = "info") {
+export function addBreadcrumb(category: string, message: string, level: "fatal" | "error" | "warning" | "info" | "debug" = "info") {
   Sentry.addBreadcrumb({
     category,
     message,
@@ -67,12 +67,3 @@ export function addBreadcrumb(category: string, message: string, level: Sentry.S
   });
 }
 
-// Performance monitoring
-export function startTransaction(name: string) {
-  return Sentry.startSpan({
-    name,
-    op: "custom",
-  }, () => {
-    // Transaction logic here
-  });
-}
