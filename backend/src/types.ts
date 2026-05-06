@@ -18,4 +18,16 @@ declare global {
   }
 }
 
-export {};
+export interface AuthRequest extends Request {
+  user: {
+    uid: string;
+    tenantId: string;
+    email: string;
+    role: string;
+    id?: string;
+  };
+  tenant?: {
+    id: string;
+    role: 'admin' | 'user';
+  };
+}

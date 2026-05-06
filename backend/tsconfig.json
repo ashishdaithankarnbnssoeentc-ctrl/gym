@@ -7,6 +7,9 @@
       "ES2022",
       "DOM"
     ],
+    "types": [
+      "node"
+    ],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -17,7 +20,11 @@
     "allowSyntheticDefaultImports": true
   },
   "include": [
-    "src/index.production.ts"
+    "src/index.production.ts",
+    "src/firebase.ts",
+    "src/types.ts",
+    "src/middleware/tenant.ts",
+    "src/lib/security.logger.ts"
   ],
   "exclude": [
     "node_modules",
